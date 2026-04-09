@@ -4,6 +4,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment
 from io import BytesIO
 
+# AJUSTE 8c: Dicionários de tradução de modelos
 MODEL_OPTIONS = {
     0: "Binomial",
     1: "Black & Scholes",
@@ -41,7 +42,7 @@ def gerar_excel_final(dados, capital_social):
     df_evid_811 = dados['8.11']
 
     # ==========================================
-    # ABAS DE EVIDÊNCIAS (auxiliares)
+    # ABAS DE EVIDÊNCIAS
     # ==========================================
     col_org_membros = 'Orgão' if 'Orgão' in df_membros.columns else 'Órgão Administrativo'
     colunas_membros_export = [
@@ -65,22 +66,22 @@ def gerar_excel_final(dados, capital_social):
             ws_e.append(r)
         max_rows[nome_aba] = ws_e.max_row
 
-    # 8.8 com fórmula de ganho (col H = E*(G-F))
+    # Evid_88: A=Órgão B=Nome C=Programa D=Lote E=Data F=Qtd G=Preço_Ex H=Preço_Merc I=Ganho
     ws_e88 = wb.create_sheet('Evid_88')
     ws_e88.append(list(df_evid_88.columns) + ['Ganho_Bruto_Formula'])
     for i, r in enumerate(dataframe_to_rows(df_evid_88, index=False, header=False), start=2):
-        ws_e88.append(list(r) + [f"=E{i}*(G{i}-F{i})"])
+        ws_e88.append(list(r) + [f"=F{i}*(H{i}-G{i})"])
     max_rows['Evid_88'] = ws_e88.max_row
 
-    # 8.11 com Era_Estatutario (col H) e fórmula de ganho (col I = E*(G-F))
+    # Evid_811: A=Órgão B=Nome C=Programa D=Lote E=Data F=Qtd G=Preço_Aq H=Preço_Merc I=Era_Estat J=Ganho
     ws_e811 = wb.create_sheet('Evid_811')
     ws_e811.append(list(df_evid_811.columns) + ['Ganho_Bruto_Formula'])
     for i, r in enumerate(dataframe_to_rows(df_evid_811, index=False, header=False), start=2):
-        ws_e811.append(list(r) + [f"=E{i}*(G{i}-F{i})"])
+        ws_e811.append(list(r) + [f"=F{i}*(H{i}-G{i})"])
     max_rows['Evid_811'] = ws_e811.max_row
 
     # ==========================================
-    # HELPER: prazos com nome do programa
+    # HELPER: prazos com nome do programa (AJUSTE 4)
     # ==========================================
     def formatar_prazos(df_filtrado, tipo_data, acoes=False):
         if df_filtrado.empty:
@@ -97,7 +98,10 @@ def gerar_excel_final(dados, capital_social):
         return "\n".join(linhas) if linhas else "-"
 
     # ==========================================
-    # QUADROS 8.5 e 8.9 (estrutura idêntica)
+    # QUADROS 8.5 e 8.9
+    #
+    # Evid_85/89 com Lote:
+    #   A=Nome  B=Órgão  C=Programa  D=Lote  E=Preço  F=Qtd  G=Status
     # ==========================================
     def criar_quadro_mov(num, df_e, max_r, ano):
         ws = wb.create_sheet(f'Quadro_{num}')
@@ -136,21 +140,23 @@ def gerar_excel_final(dados, capital_social):
                           else ("Final " + str(ano) if "final" in lbl
                                 else ("Perdidas " + str(ano) if "Perdidas" in lbl
                                       else "Exercidas " + str(ano))))
+                    # Evid_85/89: B=Órgão  E=Preço  F=Qtd  G=Status
                     ws[cel] = (f'=IFERROR('
                                f'SUMPRODUCT(--({aba_evid}!$B$2:$B${max_r}="{org}"), '
-                               f'--({aba_evid}!$F$2:$F${max_r}="{st}"), '
-                               f'{aba_evid}!$D$2:$D${max_r}, '
-                               f'{aba_evid}!$E$2:$E${max_r}) / '
-                               f'SUMIFS({aba_evid}!$E$2:$E${max_r}, '
+                               f'--({aba_evid}!$G$2:$G${max_r}="{st}"), '
+                               f'{aba_evid}!$E$2:$E${max_r}, '
+                               f'{aba_evid}!$F$2:$F${max_r}) / '
+                               f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
                                f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
-                               f'{aba_evid}!$F$2:$F${max_r}, "{st}"), 0)')
+                               f'{aba_evid}!$G$2:$G${max_r}, "{st}"), 0)')
                     ws[cel].number_format = 'R$ #,##0.00'
 
                 elif "Diluição" in lbl:
+                    # Evid_85/89: B=Órgão  F=Qtd  G=Status
                     ws[cel] = (f'=IFERROR('
-                               f'SUMIFS({aba_evid}!$E$2:$E${max_r}, '
+                               f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
                                f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
-                               f'{aba_evid}!$F$2:$F${max_r}, "Final {ano}") / {capital_social}, 0)')
+                               f'{aba_evid}!$G$2:$G${max_r}, "Final {ano}") / {capital_social}, 0)')
                     ws[cel].number_format = '0.0000%'
 
                 else:
@@ -163,6 +169,13 @@ def gerar_excel_final(dados, capital_social):
 
     # ==========================================
     # QUADROS 8.6 e 8.10
+    #
+    # Evid_86 com Lote:
+    #   A=Coluna_Rel  B=Órgão  C=Nome  D=Programa  E=Lote
+    #   F=DataOut  G=DataCar  H=DataExp  I=Qtd_Outorgada  J=Fair_Value
+    # Evid_810 com Lote:
+    #   A=Coluna_Rel  B=Órgão  C=Nome  D=Programa  E=Lote
+    #   F=DataOut  G=DataCar  H=Qtd_Outorgada  I=Fair_Value
     # ==========================================
     def criar_quadro_outorga(num, df_e, max_r):
         ws = wb.create_sheet(f'Quadro_{num}')
@@ -175,7 +188,6 @@ def gerar_excel_final(dados, capital_social):
             "Prazo de restrição", "Valor justo na data", "Multiplicação",
         ]
         aba = f'Evid_{num.replace(".", "")}'
-        # Flag de remunerados: 8.6 → col I (Tem_86), 8.10 → col M (Tem_810)
         col_flag_rem = "I" if num == '8.6' else "M"
         mr_mem = max_rows['Evid_Membros']
 
@@ -205,7 +217,8 @@ def gerar_excel_final(dados, capital_social):
                     ws[cel] = df_g['Data Outorga'].iloc[0].strftime('%d/%m/%Y') if pd.notnull(df_g['Data Outorga'].iloc[0]) else "-"
 
                 elif "Quantidade" in lbl:
-                    col_q = "$G" if num == '8.10' else "$H"
+                    # 8.10: col I=Qtd_Outorgada  |  8.6: col I=Qtd_Outorgada
+                    col_q = "$I" if num == '8.10' else "$I"
                     ws[cel] = f'=SUMIF({aba}!$A$2:$A${max_r}, "{col_n}", {aba}!{col_q}$2:{col_q}${max_r})'
                     ws[cel].number_format = '#,##0'
 
@@ -214,20 +227,26 @@ def gerar_excel_final(dados, capital_social):
 
                 elif "Prazo máximo" in lbl:
                     ws[cel] = (df_g['Data Expiração'].iloc[0].strftime('%d/%m/%Y')
-                               if '8.6' in num and pd.notnull(df_g['Data Expiração'].iloc[0]) else "-")
+                               if '8.6' in num and 'Data Expiração' in df_g.columns and pd.notnull(df_g['Data Expiração'].iloc[0]) else "-")
 
                 elif "restrição" in lbl:
                     ws[cel] = "N/A"
 
                 elif "Valor justo" in lbl:
-                    col_v, col_q = ("$H", "$G") if num == '8.10' else ("$I", "$H")
+                    # 8.6:  I=Qtd_Outorgada  J=Fair_Value
+                    # 8.10: I=Qtd_Outorgada  I=Fair_Value → H=Qtd H e I=FV
+                    col_q = "$I"; col_v = "$J"
+                    if num == '8.10':
+                        col_q = "$H"; col_v = "$I"
                     ws[cel] = (f'=IFERROR(SUMPRODUCT(--({aba}!$A$2:$A${max_r}="{col_n}"), '
                                f'{aba}!{col_q}$2:{col_q}${max_r}, {aba}!{col_v}$2:{col_v}${max_r}) / '
                                f'SUMIF({aba}!$A$2:$A${max_r}, "{col_n}", {aba}!{col_q}$2:{col_q}${max_r}), 0)')
                     ws[cel].number_format = 'R$ #,##0.00'
 
                 elif "Multiplicação" in lbl:
-                    col_v, col_q = ("$H", "$G") if num == '8.10' else ("$I", "$H")
+                    col_q = "$I"; col_v = "$J"
+                    if num == '8.10':
+                        col_q = "$H"; col_v = "$I"
                     ws[cel] = (f'=SUMPRODUCT(--({aba}!$A$2:$A${max_r}="{col_n}"), '
                                f'{aba}!{col_q}$2:{col_q}${max_r}, {aba}!{col_v}$2:{col_v}${max_r})')
                     ws[cel].number_format = 'R$ #,##0.00'
@@ -237,6 +256,10 @@ def gerar_excel_final(dados, capital_social):
 
     # ==========================================
     # QUADRO 8.7
+    #
+    # Evid_87 com Lote:
+    #   A=Órgão  B=Nome  C=Programa  D=Lote  E=Status_Vesting
+    #   F=Qtd_Saldo  G=Preço  H=Fair_Value
     # ==========================================
     ws_87 = wb.create_sheet('Quadro_8.7')
     ws_87.append(['2025'] + orgaos + ['Total'])
@@ -267,6 +290,7 @@ def gerar_excel_final(dados, capital_social):
                 ws_87[cel].number_format = '0.00'
 
             elif "remunerados" in lbl:
+                # col J = Tem_87
                 ws_87[cel] = (
                     f'=SUMPRODUCT(Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$J$2:$J${mr_mem}=1))' if org == 'Total'
                     else f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
@@ -274,8 +298,9 @@ def gerar_excel_final(dados, capital_social):
                 ws_87[cel].number_format = '0.00'
 
             elif "Quantidade" in lbl:
-                ws_87[cel] = (f'=SUMIF(Evid_87!$D$2:$D${mr_87}, "{st}", Evid_87!$E$2:$E${mr_87})' if org == 'Total'
-                              else f'=SUMIFS(Evid_87!$E$2:$E${mr_87}, Evid_87!$A$2:$A${mr_87}, "{org}", Evid_87!$D$2:$D${mr_87}, "{st}")')
+                # E=Status_Vesting  F=Qtd_Saldo
+                ws_87[cel] = (f'=SUMIF(Evid_87!$E$2:$E${mr_87}, "{st}", Evid_87!$F$2:$F${mr_87})' if org == 'Total'
+                              else f'=SUMIFS(Evid_87!$F$2:$F${mr_87}, Evid_87!$A$2:$A${mr_87}, "{org}", Evid_87!$E$2:$E${mr_87}, "{st}")')
                 ws_87[cel].number_format = '#,##0'
 
             elif "Data" in lbl:
@@ -285,17 +310,19 @@ def gerar_excel_final(dados, capital_social):
                 ws_87[cel] = formatar_prazos(df_t[df_t['Status_Vesting'] == st], 'Data_Expiração')
 
             elif "Preço" in lbl or "Valor justo (" in lbl:
-                col_v = "$F" if "Preço" in lbl else "$G"
-                n = (f'SUMPRODUCT(--(Evid_87!$D$2:$D${mr_87}="{st}"), Evid_87!$E$2:$E${mr_87}, Evid_87!{col_v}$2:{col_v}${mr_87})' if org == 'Total'
-                     else f'SUMPRODUCT(--(Evid_87!$A$2:$A${mr_87}="{org}"), --(Evid_87!$D$2:$D${mr_87}="{st}"), Evid_87!$E$2:$E${mr_87}, Evid_87!{col_v}$2:{col_v}${mr_87})')
-                d = (f'SUMIF(Evid_87!$D$2:$D${mr_87}, "{st}", Evid_87!$E$2:$E${mr_87})' if org == 'Total'
-                     else f'SUMIFS(Evid_87!$E$2:$E${mr_87}, Evid_87!$A$2:$A${mr_87}, "{org}", Evid_87!$D$2:$D${mr_87}, "{st}")')
+                # G=Preço  H=Fair_Value  F=Qtd_Saldo  E=Status_Vesting
+                col_v = "$G" if "Preço" in lbl else "$H"
+                n = (f'SUMPRODUCT(--(Evid_87!$E$2:$E${mr_87}="{st}"), Evid_87!$F$2:$F${mr_87}, Evid_87!{col_v}$2:{col_v}${mr_87})' if org == 'Total'
+                     else f'SUMPRODUCT(--(Evid_87!$A$2:$A${mr_87}="{org}"), --(Evid_87!$E$2:$E${mr_87}="{st}"), Evid_87!$F$2:$F${mr_87}, Evid_87!{col_v}$2:{col_v}${mr_87})')
+                d = (f'SUMIF(Evid_87!$E$2:$E${mr_87}, "{st}", Evid_87!$F$2:$F${mr_87})' if org == 'Total'
+                     else f'SUMIFS(Evid_87!$F$2:$F${mr_87}, Evid_87!$A$2:$A${mr_87}, "{org}", Evid_87!$E$2:$E${mr_87}, "{st}")')
                 ws_87[cel] = f'=IFERROR({n} / {d}, 0)'
                 ws_87[cel].number_format = 'R$ #,##0.00'
 
             elif "TOTAL" in lbl:
-                ws_87[cel] = (f'=SUMPRODUCT(Evid_87!$E$2:$E${mr_87}, Evid_87!$G$2:$G${mr_87})' if org == 'Total'
-                              else f'=SUMPRODUCT(--(Evid_87!$A$2:$A${mr_87}="{org}"), Evid_87!$E$2:$E${mr_87}, Evid_87!$G$2:$G${mr_87})')
+                # F=Qtd_Saldo  H=Fair_Value
+                ws_87[cel] = (f'=SUMPRODUCT(Evid_87!$F$2:$F${mr_87}, Evid_87!$H$2:$H${mr_87})' if org == 'Total'
+                              else f'=SUMPRODUCT(--(Evid_87!$A$2:$A${mr_87}="{org}"), Evid_87!$F$2:$F${mr_87}, Evid_87!$H$2:$H${mr_87})')
                 ws_87[cel].number_format = 'R$ #,##0.00'
 
             else:
@@ -303,6 +330,9 @@ def gerar_excel_final(dados, capital_social):
 
     # ==========================================
     # QUADRO 8.8
+    #
+    # Evid_88 com Lote:
+    #   A=Órgão  B=Nome  C=Programa  D=Lote  E=Data  F=Qtd  G=Preço_Ex  H=Preço_Merc  I=Ganho
     # ==========================================
     ws_88 = wb.create_sheet('Quadro_8.8')
     ws_88.append(['2025'] + orgaos + ['Total'])
@@ -329,26 +359,33 @@ def gerar_excel_final(dados, capital_social):
                 ws_88[cel].number_format = '0.00'
 
             elif "Número" in lbl:
-                ws_88[cel] = (f'=SUM(Evid_88!$E$2:$E${mr_88})' if org == 'Total'
-                              else f'=SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$E$2:$E${mr_88})')
+                # F=Qtd
+                ws_88[cel] = (f'=SUM(Evid_88!$F$2:$F${mr_88})' if org == 'Total'
+                              else f'=SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$F$2:$F${mr_88})')
                 ws_88[cel].number_format = '#,##0'
 
             elif "exercício" in lbl or "mercado" in lbl:
-                col_v = "$F" if "exercício" in lbl else "$G"
-                n = (f'SUMPRODUCT(Evid_88!$E$2:$E${mr_88}, Evid_88!{col_v}$2:{col_v}${mr_88})' if org == 'Total'
-                     else f'SUMPRODUCT(--(Evid_88!$A$2:$A${mr_88}="{org}"), Evid_88!$E$2:$E${mr_88}, Evid_88!{col_v}$2:{col_v}${mr_88})')
-                d = (f'SUM(Evid_88!$E$2:$E${mr_88})' if org == 'Total'
-                     else f'SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$E$2:$E${mr_88})')
+                # G=Preço_Ex  H=Preço_Merc  F=Qtd
+                col_v = "$G" if "exercício" in lbl else "$H"
+                n = (f'SUMPRODUCT(Evid_88!$F$2:$F${mr_88}, Evid_88!{col_v}$2:{col_v}${mr_88})' if org == 'Total'
+                     else f'SUMPRODUCT(--(Evid_88!$A$2:$A${mr_88}="{org}"), Evid_88!$F$2:$F${mr_88}, Evid_88!{col_v}$2:{col_v}${mr_88})')
+                d = (f'SUM(Evid_88!$F$2:$F${mr_88})' if org == 'Total'
+                     else f'SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$F$2:$F${mr_88})')
                 ws_88[cel] = f'=IFERROR({n} / {d}, 0)'
                 ws_88[cel].number_format = 'R$ #,##0.00'
 
             elif "Multiplicação" in lbl:
-                ws_88[cel] = (f'=SUM(Evid_88!$H$2:$H${mr_88})' if org == 'Total'
-                              else f'=SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$H$2:$H${mr_88})')
+                # I=Ganho
+                ws_88[cel] = (f'=SUM(Evid_88!$I$2:$I${mr_88})' if org == 'Total'
+                              else f'=SUMIF(Evid_88!$A$2:$A${mr_88}, "{org}", Evid_88!$I$2:$I${mr_88})')
                 ws_88[cel].number_format = 'R$ #,##0.00'
 
     # ==========================================
     # QUADRO 8.11
+    #
+    # Evid_811 com Lote:
+    #   A=Órgão  B=Nome  C=Programa  D=Lote  E=Data  F=Qtd
+    #   G=Preço_Aq  H=Preço_Merc  I=Era_Estat  J=Ganho
     # ==========================================
     ws_811 = wb.create_sheet('Quadro_8.11')
     ws_811.append(['2025'] + orgaos + ['Total'])
@@ -381,32 +418,36 @@ def gerar_excel_final(dados, capital_social):
                 ws_811[cel].number_format = '0.00'
 
             elif "Número de ações" in lbl:
-                ws_811[cel] = (f'=SUM(Evid_811!$E$2:$E${mr_811})' if org == 'Total'
-                               else f'=SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$E$2:$E${mr_811})')
+                # F=Qtd
+                ws_811[cel] = (f'=SUM(Evid_811!$F$2:$F${mr_811})' if org == 'Total'
+                               else f'=SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$F$2:$F${mr_811})')
                 ws_811[cel].number_format = '#,##0'
 
             elif "Multiplicação" in lbl:
-                # col I = Ganho_Bruto_Formula
-                ws_811[cel] = (f'=SUM(Evid_811!$I$2:$I${mr_811})' if org == 'Total'
-                               else f'=SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$I$2:$I${mr_811})')
+                # J=Ganho
+                ws_811[cel] = (f'=SUM(Evid_811!$J$2:$J${mr_811})' if org == 'Total'
+                               else f'=SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$J$2:$J${mr_811})')
                 ws_811[cel].number_format = 'R$ #,##0.00'
 
             elif "aquisição" in lbl or "mercado" in lbl:
-                col_v = "$F" if "aquisição" in lbl else "$G"
-                n = (f'SUMPRODUCT(Evid_811!$E$2:$E${mr_811}, Evid_811!{col_v}$2:{col_v}${mr_811})' if org == 'Total'
-                     else f'SUMPRODUCT(--(Evid_811!$A$2:$A${mr_811}="{org}"), Evid_811!$E$2:$E${mr_811}, Evid_811!{col_v}$2:{col_v}${mr_811})')
-                d = (f'SUM(Evid_811!$E$2:$E${mr_811})' if org == 'Total'
-                     else f'SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$E$2:$E${mr_811})')
+                # G=Preço_Aq  H=Preço_Merc  F=Qtd
+                col_v = "$G" if "aquisição" in lbl else "$H"
+                n = (f'SUMPRODUCT(Evid_811!$F$2:$F${mr_811}, Evid_811!{col_v}$2:{col_v}${mr_811})' if org == 'Total'
+                     else f'SUMPRODUCT(--(Evid_811!$A$2:$A${mr_811}="{org}"), Evid_811!$F$2:$F${mr_811}, Evid_811!{col_v}$2:{col_v}${mr_811})')
+                d = (f'SUM(Evid_811!$F$2:$F${mr_811})' if org == 'Total'
+                     else f'SUMIF(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$F$2:$F${mr_811})')
                 ws_811[cel] = f'=IFERROR({n} / {d}, 0)'
                 ws_811[cel].number_format = 'R$ #,##0.00'
 
             elif "Estatutários" in lbl:
-                ws_811[cel] = (f'=COUNTIF(Evid_811!$H$2:$H${mr_811}, TRUE)' if org == 'Total'
-                               else f'=COUNTIFS(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$H$2:$H${mr_811}, TRUE)')
+                # I=Era_Estatutario
+                ws_811[cel] = (f'=COUNTIF(Evid_811!$I$2:$I${mr_811}, TRUE)' if org == 'Total'
+                               else f'=COUNTIFS(Evid_811!$A$2:$A${mr_811}, "{org}", Evid_811!$I$2:$I${mr_811}, TRUE)')
                 ws_811[cel].number_format = '0'
 
     # ==========================================
     # QUADRO 8.12
+    # AJUSTE 8a: outorgas em ABERTO no início de 2025 (Data de Outorga < 2025)
     # ==========================================
     ws_812 = wb.create_sheet('Quadro_8.12')
     df_outorga['Data de Outorga'] = pd.to_datetime(df_outorga['Data de Outorga'], errors='coerce', dayfirst=True)
