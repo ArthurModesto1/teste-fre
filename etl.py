@@ -17,6 +17,7 @@ def processar_dados_base(arquivo_up, capital_social):
     df_mov['Órgão Administrativo'] = df_mov['Órgão Administrativo'].replace(
         {'Diretoria': 'Diretoria Estatutária', 'Conselheiro': 'Conselho de Administração'})
     df_mov['Data'] = pd.to_datetime(df_mov['Data'], errors='coerce', dayfirst=True)
+    # AJUSTE 9: remove linhas sem data válida e garante tipo inteiro nullable
     df_mov = df_mov[df_mov['Data'].notna()].copy()
     df_mov['Ano'] = df_mov['Data'].dt.year.astype('Int64')
 
@@ -24,6 +25,7 @@ def processar_dados_base(arquivo_up, capital_social):
         {'Diretoria': 'Diretoria Estatutária', 'Conselheiro': 'Conselho de Administração'})
     df_outorga['Tipo de Plano'] = df_outorga['Tipo de Plano'].fillna('')
 
+    # AJUSTE 3: Classificação SOP vs RSU por presença de Preço de Exercício (> 0)
     preco_col = 'Preço de Exercício na Outorga'
     df_outorga[preco_col] = pd.to_numeric(
         df_outorga[preco_col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
@@ -44,7 +46,7 @@ def processar_dados_base(arquivo_up, capital_social):
     df_membros['DATA DE ENTRADA'] = pd.to_datetime(df_membros['DATA DE ENTRADA'], errors='coerce', dayfirst=True)
     df_membros['DATA DE SAÍDA']   = pd.to_datetime(df_membros['DATA DE SAÍDA'],   errors='coerce', dayfirst=True)
 
-    # CORREÇÃO NOME (Bug Bruno): normaliza casing para todas as comparações
+    # CORREÇÃO NOME: normaliza casing para todas as comparações (Bug Bruno)
     df_membros['_nome_lower'] = df_membros['NOME COMPLETO'].str.lower().str.strip()
     df_mov['_nome_lower']     = df_mov['Nome'].str.lower().str.strip()
     df_sop['_nome_lower']     = df_sop['Nome'].str.lower().str.strip()
@@ -76,169 +78,190 @@ def processar_dados_base(arquivo_up, capital_social):
     # ==========================================
     # SOP — ITENS 8.5 / 8.6 / 8.7 / 8.8
     #
-    # CORREÇÃO PRINCIPAL (duplicação/saldo fictício):
-    #   O ETL anterior iterava lote a lote e cruzava as movimentações
-    #   do programa inteiro contra a qtd de cada lote individualmente,
-    #   gerando saldos fantasmas (ex: 233 para André).
-    #   Agora agrupamos por (Nome, Programa) e calculamos o saldo
-    #   consolidado do programa de uma só vez.
+    # CORREÇÃO PRINCIPAL: itera LOTE A LOTE (linha a linha na aba de outorga).
+    # Cada lote tem sua própria data de carência, quantidade e ciclo de vida.
+    # O cruzamento com o histórico filtra também pelo número do Lote, garantindo
+    # que exercícios de um lote não contaminem o saldo de outro.
     # ==========================================
     programas_sop = set(df_sop['Programa'].unique())
 
-    for (nome_lower, programa), grupo in df_sop.groupby(['_nome_lower', 'Programa'], sort=False):
+    for _, lote in df_sop.iterrows():
+        nome     = lote['Nome']
+        nlow     = lote['_nome_lower']
+        orgao    = lote['Órgão Administrativo']
+        prog     = lote['Programa']
+        lote_num = lote['Lote']
+        qtd      = lote['Outorgado (original)']
+        data_out = lote['Data de Outorga']
 
-        row0     = grupo.iloc[0]
-        nome     = row0['Nome']
-        orgao    = row0['Órgão Administrativo']
-        data_out = row0['Data de Outorga']
+        # AJUSTE 2: preco_inicial para posições realizadas; preco_atual para previsões
+        preco_inicial = lote['Preço de Exercício na Outorga']
+        preco_atual   = lote['Preço de Exercício Atual']
+        fv_atualizado = lote['Fair Value Atualizado']
 
-        preco_inicial = row0['Preço de Exercício na Outorga']
-        preco_atual   = row0['Preço de Exercício Atual']
+        # Filtra movimentações exatamente deste lote (nome + programa + número do lote)
+        movs = df_mov[
+            (df_mov['_nome_lower'] == nlow) &
+            (df_mov['Programa']    == prog) &
+            (df_mov['Lote']        == lote_num)
+        ]
 
-        # Quantidade total do programa (soma dos lotes)
-        qtd_total = grupo['Outorgado (original)'].sum()
-
-        # Movimentações — match por nome normalizado
-        movs = df_mov[(df_mov['_nome_lower'] == nome_lower) & (df_mov['Programa'] == programa)]
-
+        # Saldo antes de 2025
         exercidas_pre = movs[(movs['Ano'] <= 2024) & (movs['Status'] == 'Exercido')][col_qtd_mov].sum()
         perdidas_pre  = movs[(movs['Ano'] <= 2024) & (movs['Status'].isin(['Cancelado', 'Prescrito', 'Abandonado']))][col_qtd_mov].sum()
-        saldo_ini     = qtd_total - exercidas_pre - perdidas_pre
+        saldo_ini = qtd - exercidas_pre - perdidas_pre
 
-        if saldo_ini > 0:
-            evid_85.append([nome, orgao, programa, preco_inicial, saldo_ini, 'Inicial 2025'])
+        # Lote encerrado antes de 2025 — ignora
+        if saldo_ini <= 0:
+            continue
 
+        # CORREÇÃO Leandro_2026: lotes outorgados em 2026 não existiam em 01/01/2025
+        if pd.notnull(data_out) and data_out.year > 2025:
+            continue
+
+        # Linha Inicial 2025
+        evid_85.append([nome, orgao, prog, lote_num, preco_inicial, saldo_ini, 'Inicial 2025'])
+
+        # Movimentações em 2025
         exercidas_25 = movs[(movs['Ano'] == 2025) & (movs['Status'] == 'Exercido')][col_qtd_mov].sum()
-        if exercidas_25 > 0:
-            preco_ex_mov = movs[(movs['Ano'] == 2025) & (movs['Status'] == 'Exercido')][col_preco_mov].mean()
-            evid_85.append([nome, orgao, programa, preco_ex_mov, exercidas_25, 'Exercidas 2025'])
+        perdidas_25  = movs[(movs['Ano'] == 2025) & (movs['Status'].isin(['Cancelado', 'Prescrito', 'Abandonado']))][col_qtd_mov].sum()
 
-        perdidas_25 = movs[(movs['Ano'] == 2025) & (movs['Status'].isin(['Cancelado', 'Prescrito', 'Abandonado']))][col_qtd_mov].sum()
+        if exercidas_25 > 0:
+            # PE das exercidas vem do histórico (já atualizado na data do exercício)
+            preco_ex = movs[(movs['Ano'] == 2025) & (movs['Status'] == 'Exercido')][col_preco_mov].mean()
+            evid_85.append([nome, orgao, prog, lote_num, preco_ex, exercidas_25, 'Exercidas 2025'])
+
         if perdidas_25 > 0:
-            evid_85.append([nome, orgao, programa, preco_inicial, perdidas_25, 'Perdidas 2025'])
+            evid_85.append([nome, orgao, prog, lote_num, preco_inicial, perdidas_25, 'Perdidas 2025'])
 
         saldo_fim = saldo_ini - exercidas_25 - perdidas_25
 
-        # CORREÇÃO Leandro_2026: programas outorgados em 2026 não compõem o saldo de 2025
-        if saldo_fim > 0 and pd.notnull(data_out) and data_out.year <= 2025:
-            evid_85.append([nome, orgao, programa, preco_inicial, saldo_fim, 'Final 2025'])
-            evid_85.append([nome, orgao, programa, preco_atual,   saldo_fim, 'Inicial 2026'])
-            evid_85.append([nome, orgao, programa, preco_atual,   saldo_fim, 'Final 2026'])
+        if saldo_fim > 0:
+            evid_85.append([nome, orgao, prog, lote_num, preco_inicial, saldo_fim, 'Final 2025'])
+            evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Inicial 2026'])
+            evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Final 2026'])
 
+            # 8.7 — opções em aberto no final de 2025
             st_v = ('Exercível'
-                    if (pd.notnull(row0['Data da Carência']) and row0['Data da Carência'] <= limite_2025)
+                    if (pd.notnull(lote['Data da Carência']) and lote['Data da Carência'] <= limite_2025)
                     else 'Não exercível')
             evid_87.append([
-                orgao, nome, programa, st_v, saldo_fim, preco_inicial,
-                row0['Fair Value Atualizado'],
-                data_out, row0['Data da Carência'], row0['Data de Expiração']
+                orgao, nome, prog, lote_num, st_v, saldo_fim, preco_inicial,
+                fv_atualizado, data_out, lote['Data da Carência'], lote['Data de Expiração']
             ])
 
-        # 8.6 — detalhamento de outorgas de 2025
-        if pd.notnull(data_out) and data_out.year == 2025 and qtd_total > 0:
-            row_last = grupo.sort_values('Data da Carência').iloc[-1]
+        # 8.6 — detalhamento de outorgas realizadas em 2025
+        if pd.notnull(data_out) and data_out.year == 2025 and qtd > 0:
             evid_86.append([
-                f"{programa} ({orgao})", orgao, nome, programa,
-                data_out,
-                row_last['Data da Carência'],
-                row_last['Data de Expiração'],
-                qtd_total,
-                grupo['Fair Value na Outorga'].mean()
+                f"{prog} ({orgao})", orgao, nome, prog, lote_num,
+                data_out, lote['Data da Carência'], lote['Data de Expiração'],
+                qtd, lote['Fair Value na Outorga']
             ])
 
-    # Previsões 2026 para SOP (8.5)
+    # Previsões 2026 para SOP (8.5) — sem número de lote (ainda não existe)
     for i, row in df_prev.iterrows():
         val = str(row.iloc[0])
         if 'Quantidade a ser outorgada' in val:
-            qtd = pd.to_numeric(row.iloc[1], errors='coerce')
+            qtd_prev = pd.to_numeric(row.iloc[1], errors='coerce')
             try:
-                preco = pd.to_numeric(df_prev.iloc[i + 1].iloc[1], errors='coerce')
+                preco_prev = pd.to_numeric(df_prev.iloc[i + 1].iloc[1], errors='coerce')
             except Exception:
-                preco = 0
-            if pd.notnull(qtd) and qtd > 0:
+                preco_prev = 0
+            if pd.notnull(qtd_prev) and qtd_prev > 0:
                 o_nome = 'Conselho de Administração' if 'Conselho' in val else 'Diretoria Estatutária'
                 prog_n = 'Novo Prog. CA' if 'Conselho' in val else 'Novo Prog. Dir'
+                p = preco_prev if pd.notnull(preco_prev) else 0
                 evid_85.extend([
-                    [prog_n, o_nome, 'Previsão 2026', preco if pd.notnull(preco) else 0, qtd, 'Novas 2026'],
-                    [prog_n, o_nome, 'Previsão 2026', preco if pd.notnull(preco) else 0, qtd, 'Final 2026'],
+                    [prog_n, o_nome, 'Previsão 2026', None, p, qtd_prev, 'Novas 2026'],
+                    [prog_n, o_nome, 'Previsão 2026', None, p, qtd_prev, 'Final 2026'],
                 ])
 
-    # 8.8 — exercidas 2025 vindas do histórico
+    # 8.8 — exercidas 2025 vindas do histórico (por lote)
     df_ex_25 = df_mov[
         (df_mov['Ano'] == 2025) &
         (df_mov['Status'] == 'Exercido') &
         (df_mov['Programa'].isin(programas_sop))
     ].copy()
     for _, row in df_ex_25.iterrows():
-        qtd = pd.to_numeric(str(row[col_qtd_mov]).replace(',', '.'), errors='coerce')
-        if pd.notnull(qtd) and qtd > 0:
+        qtd_ex = pd.to_numeric(str(row[col_qtd_mov]).replace(',', '.'), errors='coerce')
+        if pd.notnull(qtd_ex) and qtd_ex > 0:
             evid_88.append([
-                row['Órgão Administrativo'], row['Nome'], row['Programa'],
+                row['Órgão Administrativo'], row['Nome'], row['Programa'], row['Lote'],
                 row['Data'].strftime('%d/%m/%Y'),
-                qtd,
+                qtd_ex,
                 pd.to_numeric(str(row[col_preco_mov]).replace(',', '.'),  errors='coerce'),
                 pd.to_numeric(str(row[col_preco_merc]).replace(',', '.'), errors='coerce')
             ])
 
     # ==========================================
     # RSU — ITENS 8.9 / 8.10 / 8.11
-    # Mesma correção: agrupamento por (Nome, Programa)
+    # Mesma lógica: itera lote a lote
     # ==========================================
     programas_rsu = set(df_acoes['Programa'].unique())
 
-    for (nome_lower, programa), grupo in df_acoes.groupby(['_nome_lower', 'Programa'], sort=False):
-        row0     = grupo.iloc[0]
-        nome     = row0['Nome']
-        orgao    = row0['Órgão Administrativo']
-        data_out = row0['Data de Outorga']
-        fv_outorga = grupo['Fair Value na Outorga'].mean()
-        fv_atual   = grupo['Fair Value Atualizado'].mean()
-        qtd_total  = grupo['Outorgado (original)'].sum()
-        ano_out    = data_out.year if pd.notnull(data_out) else 0
+    for _, lote in df_acoes.iterrows():
+        nome     = lote['Nome']
+        nlow     = lote['_nome_lower']
+        orgao    = lote['Órgão Administrativo']
+        prog     = lote['Programa']
+        lote_num = lote['Lote']
+        qtd      = lote['Outorgado (original)']
+        data_out = lote['Data de Outorga']
+        fv_out   = lote['Fair Value na Outorga']
+        fv_atu   = lote['Fair Value Atualizado']
+        ano_out  = data_out.year if pd.notnull(data_out) else 0
 
-        movs = df_mov[(df_mov['_nome_lower'] == nome_lower) & (df_mov['Programa'] == programa)]
+        movs = df_mov[
+            (df_mov['_nome_lower'] == nlow) &
+            (df_mov['Programa']    == prog) &
+            (df_mov['Lote']        == lote_num)
+        ]
         termos_entregue = 'Exercido|Liberado|Entregue|Resgatado'
         termos_perdida  = 'Cancelado|Prescrito|Abandonado'
 
         if ano_out == 2025:
             saldo_ini    = 0
-            outorgadas_25 = qtd_total
+            outorgadas_25 = qtd
+        elif ano_out > 2025:
+            continue  # outorga futura, não existia em 2025
         else:
             outorgadas_25 = 0
             entregues_pre = movs[(movs['Ano'] <= 2024) & (movs['Status'].str.contains(termos_entregue, case=False, na=False))][col_qtd_mov].sum()
             perdidas_pre  = movs[(movs['Ano'] <= 2024) & (movs['Status'].str.contains(termos_perdida,  case=False, na=False))][col_qtd_mov].sum()
-            saldo_ini     = qtd_total - entregues_pre - perdidas_pre
+            saldo_ini     = qtd - entregues_pre - perdidas_pre
+            if saldo_ini <= 0:
+                continue
 
         entregues_25 = movs[(movs['Ano'] == 2025) & (movs['Status'].str.contains(termos_entregue, case=False, na=False))][col_qtd_mov].sum()
         perdidas_25  = movs[(movs['Ano'] == 2025) & (movs['Status'].str.contains(termos_perdida,  case=False, na=False))][col_qtd_mov].sum()
         saldo_fim    = saldo_ini + outorgadas_25 - entregues_25 - perdidas_25
 
-        if saldo_ini     > 0: evid_89.append([nome, orgao, programa, fv_outorga, saldo_ini,    'Inicial 2025'])
-        if outorgadas_25 > 0: evid_89.append([nome, orgao, programa, fv_outorga, outorgadas_25,'Outorgadas 2025'])
-        if entregues_25  > 0: evid_89.append([nome, orgao, programa, fv_outorga, entregues_25, 'Entregues 2025'])
-        if perdidas_25   > 0: evid_89.append([nome, orgao, programa, fv_outorga, perdidas_25,  'Perdidas 2025'])
-        if saldo_fim     > 0: evid_89.append([nome, orgao, programa, fv_atual,   saldo_fim,    'Final 2025'])
+        if saldo_ini     > 0: evid_89.append([nome, orgao, prog, lote_num, fv_out, saldo_ini,    'Inicial 2025'])
+        if outorgadas_25 > 0: evid_89.append([nome, orgao, prog, lote_num, fv_out, outorgadas_25,'Outorgadas 2025'])
+        if entregues_25  > 0: evid_89.append([nome, orgao, prog, lote_num, fv_out, entregues_25, 'Entregues 2025'])
+        if perdidas_25   > 0: evid_89.append([nome, orgao, prog, lote_num, fv_out, perdidas_25,  'Perdidas 2025'])
+        if saldo_fim     > 0: evid_89.append([nome, orgao, prog, lote_num, fv_atu, saldo_fim,    'Final 2025'])
 
-        if ano_out == 2025 and qtd_total > 0:
-            row_last = grupo.sort_values('Data da Carência').iloc[-1]
+        if ano_out == 2025 and qtd > 0:
             evid_810.append([
-                f"{programa} ({orgao})", orgao, nome, programa,
-                data_out, row_last['Data da Carência'], qtd_total, fv_outorga
+                f"{prog} ({orgao})", orgao, nome, prog, lote_num,
+                data_out, lote['Data da Carência'], qtd, fv_out
             ])
 
+    # AJUSTE 6: Previsões 2026 para RSU (8.9)
     for i, row in df_prev.iterrows():
         val = str(row.iloc[0])
         if 'Quantidade a ser outorgada' in val:
-            qtd = pd.to_numeric(row.iloc[1], errors='coerce')
-            if pd.notnull(qtd) and qtd > 0:
+            qtd_prev = pd.to_numeric(row.iloc[1], errors='coerce')
+            if pd.notnull(qtd_prev) and qtd_prev > 0:
                 o_nome = 'Conselho de Administração' if 'Conselho' in val else 'Diretoria Estatutária'
                 prog_n = 'Novo Prog. CA (RSU)' if 'Conselho' in val else 'Novo Prog. Dir (RSU)'
                 evid_89.extend([
-                    [prog_n, o_nome, 'Previsão 2026', 0, qtd, 'Novas 2026'],
-                    [prog_n, o_nome, 'Previsão 2026', 0, qtd, 'Final 2026'],
+                    [prog_n, o_nome, 'Previsão 2026', None, 0, qtd_prev, 'Novas 2026'],
+                    [prog_n, o_nome, 'Previsão 2026', None, 0, qtd_prev, 'Final 2026'],
                 ])
 
-    # 8.11 — entregues 2025 (RSU)
+    # 8.11 — entregues 2025 (RSU) por lote
     df_ent_25 = df_mov[
         (df_mov['Ano'] == 2025) &
         (df_mov['Status'].str.contains('Exercido|Liberado|Entregue|Resgatado', case=False, na=False)) &
@@ -252,8 +275,9 @@ def processar_dados_base(arquivo_up, capital_social):
             p_merc = pd.to_numeric(str(row_ent[col_preco_merc]).replace(',', '.'), errors='coerce')
             data_mov = row_ent['Data']
 
-            nome_lower_ent = str(row_ent['Nome']).lower().strip()
-            membro_info = df_membros[df_membros['_nome_lower'] == nome_lower_ent]
+            # AJUSTE 7b: verifica se era Estatutário na data do exercício
+            nlow_ent = str(row_ent['Nome']).lower().strip()
+            membro_info = df_membros[df_membros['_nome_lower'] == nlow_ent]
             era_estatutario = False
             if not membro_info.empty:
                 entrada = membro_info.iloc[0]['DATA DE ENTRADA']
@@ -264,26 +288,28 @@ def processar_dados_base(arquivo_up, capital_social):
                 )
 
             evid_811.append([
-                row_ent['Órgão Administrativo'], row_ent['Nome'], row_ent['Programa'],
+                row_ent['Órgão Administrativo'], row_ent['Nome'], row_ent['Programa'], row_ent['Lote'],
                 data_mov.strftime('%d/%m/%Y'), qtd_ent, p_aq, p_merc, era_estatutario
             ])
 
     # ==========================================
-    # DATAFRAMES FINAIS
+    # DATAFRAMES FINAIS — com coluna Lote
     # ==========================================
-    df_evid_85  = pd.DataFrame(evid_85,  columns=['Nome', 'Órgão Administrativo', 'Programa', 'Preço', 'Qtd', 'Status'])
-    df_evid_86  = pd.DataFrame(evid_86,  columns=['Coluna_Relatorio', 'Órgão Administrativo', 'Nome', 'Programa', 'Data Outorga', 'Data Carência', 'Data Expiração', 'Qtd_Outorgada', 'Fair_Value'])
-    df_evid_87  = pd.DataFrame(evid_87,  columns=['Órgão Administrativo', 'Nome', 'Programa', 'Status_Vesting', 'Qtd_Saldo', 'Preço', 'Fair_Value', 'Data_Outorga', 'Data_Carência', 'Data_Expiração'])
-    df_evid_88  = pd.DataFrame(evid_88,  columns=['Órgão Administrativo', 'Nome', 'Programa', 'Data', 'Qtd', 'Preço_Ex', 'Preço_Merc'])
-    df_evid_89  = pd.DataFrame(evid_89,  columns=['Nome', 'Órgão Administrativo', 'Programa', 'Fair_Value', 'Qtd', 'Status'])
-    df_evid_810 = pd.DataFrame(evid_810, columns=['Coluna_Relatorio', 'Órgão Administrativo', 'Nome', 'Programa', 'Data Outorga', 'Data Carência', 'Qtd_Outorgada', 'Fair_Value'])
-    df_evid_811 = pd.DataFrame(evid_811, columns=['Órgão Administrativo', 'Nome', 'Programa', 'Data', 'Qtd', 'Preço_Aquisicao', 'Preço_Mercado', 'Era_Estatutario'])
-    df_evid_811 = df_evid_811.drop_duplicates(subset=['Nome', 'Programa', 'Data', 'Qtd'])
+    df_evid_85  = pd.DataFrame(evid_85,  columns=['Nome', 'Órgão Administrativo', 'Programa', 'Lote', 'Preço', 'Qtd', 'Status'])
+    df_evid_86  = pd.DataFrame(evid_86,  columns=['Coluna_Relatorio', 'Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data Outorga', 'Data Carência', 'Data Expiração', 'Qtd_Outorgada', 'Fair_Value'])
+    df_evid_87  = pd.DataFrame(evid_87,  columns=['Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Status_Vesting', 'Qtd_Saldo', 'Preço', 'Fair_Value', 'Data_Outorga', 'Data_Carência', 'Data_Expiração'])
+    df_evid_88  = pd.DataFrame(evid_88,  columns=['Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data', 'Qtd', 'Preço_Ex', 'Preço_Merc'])
+    df_evid_89  = pd.DataFrame(evid_89,  columns=['Nome', 'Órgão Administrativo', 'Programa', 'Lote', 'Fair_Value', 'Qtd', 'Status'])
+    df_evid_810 = pd.DataFrame(evid_810, columns=['Coluna_Relatorio', 'Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data Outorga', 'Data Carência', 'Qtd_Outorgada', 'Fair_Value'])
+    # AJUSTE 7a: coluna Era_Estatutario + deduplicação
+    df_evid_811 = pd.DataFrame(evid_811, columns=['Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data', 'Qtd', 'Preço_Aquisicao', 'Preço_Mercado', 'Era_Estatutario'])
+    df_evid_811 = df_evid_811.drop_duplicates(subset=['Nome', 'Programa', 'Lote', 'Data', 'Qtd'])
 
     # ==========================================
     # MARCAÇÃO DE MEMBROS (nome normalizado — corrige bug do Bruno)
     # ==========================================
-    def nomes_lower(df, col): return set(df[col].str.lower().str.strip().unique()) if not df.empty else set()
+    def nomes_lower(df, col):
+        return set(df[col].str.lower().str.strip().unique()) if not df.empty else set()
 
     nomes_85_2025 = nomes_lower(df_evid_85[df_evid_85['Status'].str.contains('2025')], 'Nome')
     nomes_85_2026 = nomes_lower(df_evid_85[df_evid_85['Status'].str.contains('2026')], 'Nome')
