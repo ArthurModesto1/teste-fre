@@ -4,7 +4,6 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment
 from io import BytesIO
 
-# AJUSTE 8c: Dicionários de tradução de modelos
 MODEL_OPTIONS = {
     0: "Binomial",
     1: "Black & Scholes",
@@ -25,8 +24,7 @@ def gerar_excel_final(dados, capital_social):
     orgaos = ['Conselho de Administração', 'Diretoria Estatutária', 'Conselho Fiscal']
 
     def get_t(orgao):
-        return ("*administração*" if "Administração" in orgao
-                else ("*fiscal*" if "Fiscal" in orgao else "*diretoria*"))
+        return orgao
 
     def get_col(i):
         return openpyxl.utils.get_column_letter(i)
@@ -81,7 +79,7 @@ def gerar_excel_final(dados, capital_social):
     max_rows['Evid_811'] = ws_e811.max_row
 
     # ==========================================
-    # HELPER: prazos com nome do programa (AJUSTE 4)
+    # HELPER: prazos com nome do programa
     # ==========================================
     def formatar_prazos(df_filtrado, tipo_data, acoes=False):
         if df_filtrado.empty:
@@ -447,7 +445,6 @@ def gerar_excel_final(dados, capital_social):
 
     # ==========================================
     # QUADRO 8.12
-    # AJUSTE 8a: outorgas em ABERTO no início de 2025 (Data de Outorga < 2025)
     # ==========================================
     ws_812 = wb.create_sheet('Quadro_8.12')
     df_outorga['Data de Outorga'] = pd.to_datetime(df_outorga['Data de Outorga'], errors='coerce', dayfirst=True)
