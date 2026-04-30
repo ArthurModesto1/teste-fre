@@ -225,7 +225,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
         if chave == "8.12":
             df_out = dados_completos.get('df_outorga', pd.DataFrame())
             df_out['Data de Outorga'] = pd.to_datetime(df_out.get('Data de Outorga'), errors='coerce', dayfirst=True)
-            df_25 = df_out[df_out['Data de Outorga'].dt.year < 2025].copy()
+            df_25 = df_out[df_out['Data de Outorga'].dt.year <= 2025].copy()
 
             if df_25.empty:
                 resumos_por_ano["2025"] = pd.DataFrame({"Aviso": ["Nenhum programa em aberto no início de 2025"]})
@@ -295,20 +295,29 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 n_total = len(df_membros)
             else:
                 mask = df_membros[col_org_membros].astype(str) == org
-                n_total = mask.sum()
+                n_total = int(mask.sum())
             resumo[org]["Nº total de membros"] = fmt(n_total, "int")
             resumo[org]["N° de membros remunerados"] = fmt(len(d['Nome'].unique()), "int")
 
             if chave == "8.5":
                 resumo[org]["Preço médio ponderado de exercício:"] = ""
+
+                def preco_pond(df_filtrado):
+                    qtd = df_filtrado['Qtd']
+                    preco = df_filtrado['Preço']
+                    total_qtd = qtd.sum()
+                    if total_qtd == 0:
+                        return 0
+                    return (preco * qtd).sum() / total_qtd
+
                 resumo[org]["  Em aberto no início do exercício"] = fmt(
-                    d[d['Status'].str.contains('Inicial', na=False)]['Preço'].mean(), "moeda"
+                    preco_pond(d[d['Status'].str.contains('Inicial', na=False)]), "moeda"
                 )
                 resumo[org]["  Perdidas e expiradas"] = fmt(
-                    d[d['Status'].str.contains('Perdidas', na=False)]['Preço'].mean(), "moeda"
+                    preco_pond(d[d['Status'].str.contains('Perdidas', na=False)]), "moeda"
                 )
                 resumo[org]["  Exercidas durante o exercício"] = fmt(
-                    d[d['Status'].str.contains('Exercidas', na=False)]['Preço'].mean(), "moeda"
+                    preco_pond(d[d['Status'].str.contains('Exercidas', na=False)]), "moeda"
                 )
                 qtd_fim = d[d['Status'].str.contains('Final', na=False)]['Qtd'].sum()
                 resumo[org]["Diluição potencial em caso de exercício"] = fmt(
@@ -339,8 +348,20 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 )
 
             elif chave == "8.9":
+                resumo[org]["Em aberto no início do exercício"] = fmt(
+                    d[d['Status'].str.contains('Inicial', na=False)]['Qtd'].sum(), "int"
+                )
+                resumo[org]["Novas outorgadas no exercício"] = fmt(
+                    d[d['Status'].str.contains('Outorgadas', na=False)]['Qtd'].sum(), "int"
+                )
+                resumo[org]["Entregues no exercício"] = fmt(
+                    d[d['Status'].str.contains('Entregues', na=False)]['Qtd'].sum(), "int"
+                )
+                resumo[org]["Perdidas/canceladas no exercício"] = fmt(
+                    d[d['Status'].str.contains('Perdidas', na=False)]['Qtd'].sum(), "int"
+                )
                 qtd_fim = d[d['Status'].str.contains('Final', na=False)]['Qtd'].sum()
-                resumo[org]["Número de ações"]    = fmt(qtd_fim, "int")
+                resumo[org]["Em aberto no final do exercício"] = fmt(qtd_fim, "int")
                 resumo[org]["Diluição potencial"] = fmt((qtd_fim / cap_social) if cap_social else 0, "perc")
 
             elif chave == "8.11":
@@ -399,6 +420,11 @@ if arquivo_up is not None:
     if abas_faltantes:
         st.error(f"⚠️ Erro: Faltam as abas: **{', '.join(abas_faltantes)}**.")
     else:
+        arquivo_id = f"{arquivo_up.name}__{arquivo_up.size}"
+        if st.session_state.get("arquivo_id") != arquivo_id:
+            st.session_state.arquivo_id = arquivo_id
+            st.session_state.pop("dados_processados", None)
+
         if "dados_processados" not in st.session_state:
             with st.spinner("Lendo e processando base de dados..."):
                 st.session_state.dados_processados = processar_dados_base(arquivo_up, capital_social)
