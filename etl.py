@@ -124,18 +124,22 @@ def processar_dados_base(arquivo_up, capital_social):
         saldo_fim = saldo_ini - exercidas_25 - perdidas_25
 
         if saldo_fim > 0:
-            evid_85.append([nome, orgao, prog, lote_num, preco_inicial, saldo_fim, 'Final 2025'])
-            evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Inicial 2026'])
-            evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Final 2026'])
+            # Ignora opções já expiradas antes do final de 2025
+            if pd.notnull(lote['Data de Expiração']) and lote['Data de Expiração'] < limite_2025:
+                pass
+            else:
+                evid_85.append([nome, orgao, prog, lote_num, preco_inicial, saldo_fim, 'Final 2025'])
+                evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Inicial 2026'])
+                evid_85.append([nome, orgao, prog, lote_num, preco_atual,   saldo_fim, 'Final 2026'])
 
-            # 8.7 — opções em aberto no final de 2025
-            st_v = ('Exercível'
-                    if (pd.notnull(lote['Data da Carência']) and lote['Data da Carência'] <= limite_2025)
-                    else 'Não exercível')
-            evid_87.append([
-                orgao, nome, prog, lote_num, st_v, saldo_fim, preco_inicial,
-                fv_atualizado, data_out, lote['Data da Carência'], lote['Data de Expiração']
-            ])
+                # 8.7 — opções em aberto no final de 2025
+                st_v = ('Exercível'
+                        if (pd.notnull(lote['Data da Carência']) and lote['Data da Carência'] <= limite_2025)
+                        else 'Não exercível')
+                evid_87.append([
+                    orgao, nome, prog, lote_num, st_v, saldo_fim, preco_inicial,
+                    fv_atualizado, data_out, lote['Data da Carência'], lote['Data de Expiração']
+                ])
 
         # 8.6 — detalhamento de outorgas realizadas em 2025
         if pd.notnull(data_out) and data_out.year == 2025 and qtd > 0:
@@ -153,7 +157,6 @@ def processar_dados_base(arquivo_up, capital_social):
         """Retorna dict {orgao: (qtd, preco, nome_prog)} lido da aba de previsão."""
         result = {}
         n_cols = len(df_prev.columns)
-        # Se a coluna solicitada não existe na aba, retorna vazio silenciosamente
         if col_idx >= n_cols:
             return result
         # Tenta detectar o nome do programa
@@ -328,7 +331,7 @@ def processar_dados_base(arquivo_up, capital_social):
     df_evid_811 = df_evid_811.drop_duplicates(subset=['Nome', 'Programa', 'Lote', 'Data', 'Qtd'])
 
     # ==========================================
-    # MARCAÇÃO DE MEMBROS (nome normalizado — corrige bug do Bruno)
+    # MARCAÇÃO DE MEMBROS
     # ==========================================
     def nomes_lower(df, col):
         return set(df[col].str.lower().str.strip().unique()) if not df.empty else set()
