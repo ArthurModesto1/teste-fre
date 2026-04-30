@@ -17,7 +17,6 @@ def processar_dados_base(arquivo_up, capital_social):
     df_mov['Órgão Administrativo'] = df_mov['Órgão Administrativo'].replace(
         {'Diretoria': 'Diretoria Estatutária', 'Conselheiro': 'Conselho de Administração'})
     df_mov['Data'] = pd.to_datetime(df_mov['Data'], errors='coerce', dayfirst=True)
-    # AJUSTE 9: remove linhas sem data válida e garante tipo inteiro nullable
     df_mov = df_mov[df_mov['Data'].notna()].copy()
     df_mov['Ano'] = df_mov['Data'].dt.year.astype('Int64')
 
@@ -25,12 +24,11 @@ def processar_dados_base(arquivo_up, capital_social):
         {'Diretoria': 'Diretoria Estatutária', 'Conselheiro': 'Conselho de Administração'})
     df_outorga['Tipo de Plano'] = df_outorga['Tipo de Plano'].fillna('')
 
-    # AJUSTE 3: Classificação SOP vs RSU por presença de Preço de Exercício (> 0)
     preco_col = 'Preço de Exercício na Outorga'
     df_outorga[preco_col] = pd.to_numeric(
         df_outorga[preco_col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
-    df_sop   = df_outorga[df_outorga[preco_col] > 0].copy()
-    df_acoes = df_outorga[df_outorga[preco_col] == 0].copy()
+    df_sop   = df_outorga[(df_outorga[preco_col] > 0) & (df_outorga[preco_col] < 1e8)].copy()
+    df_acoes = df_outorga[(df_outorga[preco_col] == 0) | (df_outorga[preco_col] >= 1e8)].copy()
 
     cols_num = ['Preço de Exercício Atual', 'Fair Value na Outorga',
                 'Outorgado (original)', 'Fair Value Atualizado']
@@ -46,7 +44,6 @@ def processar_dados_base(arquivo_up, capital_social):
     df_membros['DATA DE ENTRADA'] = pd.to_datetime(df_membros['DATA DE ENTRADA'], errors='coerce', dayfirst=True)
     df_membros['DATA DE SAÍDA']   = pd.to_datetime(df_membros['DATA DE SAÍDA'],   errors='coerce', dayfirst=True)
 
-    # CORREÇÃO NOME: normaliza casing para todas as comparações (Bug Bruno)
     df_membros['_nome_lower'] = df_membros['NOME COMPLETO'].str.lower().str.strip()
     df_mov['_nome_lower']     = df_mov['Nome'].str.lower().str.strip()
     df_sop['_nome_lower']     = df_sop['Nome'].str.lower().str.strip()
@@ -75,14 +72,6 @@ def processar_dados_base(arquivo_up, capital_social):
     evid_89, evid_810, evid_811 = [], [], []
     limite_2025 = pd.Timestamp('2025-12-31')
 
-    # ==========================================
-    # SOP — ITENS 8.5 / 8.6 / 8.7 / 8.8
-    #
-    # CORREÇÃO PRINCIPAL: itera LOTE A LOTE (linha a linha na aba de outorga).
-    # Cada lote tem sua própria data de carência, quantidade e ciclo de vida.
-    # O cruzamento com o histórico filtra também pelo número do Lote, garantindo
-    # que exercícios de um lote não contaminem o saldo de outro.
-    # ==========================================
     programas_sop = set(df_sop['Programa'].unique())
 
     for _, lote in df_sop.iterrows():
@@ -94,7 +83,6 @@ def processar_dados_base(arquivo_up, capital_social):
         qtd      = lote['Outorgado (original)']
         data_out = lote['Data de Outorga']
 
-        # AJUSTE 2: preco_inicial para posições realizadas; preco_atual para previsões
         preco_inicial = lote['Preço de Exercício na Outorga']
         preco_atual   = lote['Preço de Exercício Atual']
         fv_atualizado = lote['Fair Value Atualizado']
@@ -115,7 +103,6 @@ def processar_dados_base(arquivo_up, capital_social):
         if saldo_ini <= 0:
             continue
 
-        # CORREÇÃO Leandro_2026: lotes outorgados em 2026 não existiam em 01/01/2025
         if pd.notnull(data_out) and data_out.year > 2025:
             continue
 
@@ -158,23 +145,60 @@ def processar_dados_base(arquivo_up, capital_social):
                 qtd, lote['Fair Value na Outorga']
             ])
 
-    # Previsões 2026 para SOP (8.5) — sem número de lote (ainda não existe)
-    for i, row in df_prev.iterrows():
-        val = str(row.iloc[0])
-        if 'Quantidade a ser outorgada' in val:
-            qtd_prev = pd.to_numeric(row.iloc[1], errors='coerce')
-            try:
-                preco_prev = pd.to_numeric(df_prev.iloc[i + 1].iloc[1], errors='coerce')
-            except Exception:
-                preco_prev = 0
-            if pd.notnull(qtd_prev) and qtd_prev > 0:
-                o_nome = 'Conselho de Administração' if 'Conselho' in val else 'Diretoria Estatutária'
-                prog_n = 'Novo Prog. CA' if 'Conselho' in val else 'Novo Prog. Dir'
-                p = preco_prev if pd.notnull(preco_prev) else 0
-                evid_85.extend([
-                    [prog_n, o_nome, 'Previsão 2026', None, p, qtd_prev, 'Novas 2026'],
-                    [prog_n, o_nome, 'Previsão 2026', None, p, qtd_prev, 'Final 2026'],
-                ])
+    # Previsões 2026 para SOP (8.5)
+    # Suporta duas estruturas de aba:
+    #   Formato A (antigo): "Quantidade a ser outorgada" com órgão no mesmo texto
+    #   Formato B (novo):   linhas separadas por órgão com descrição completa
+    def _ler_prev_col(col_idx=1):
+        """Retorna dict {orgao: (qtd, preco, nome_prog)} lido da aba de previsão."""
+        result = {}
+        # Tenta detectar o nome do programa
+        nome_prog_prev = 'Novo Programa 2026'
+        for i, row in df_prev.iterrows():
+            val = str(row.iloc[col_idx]).strip() if pd.notnull(row.iloc[col_idx]) else ''
+            desc = str(row.iloc[col_idx - 1]).strip() if col_idx > 0 else ''
+            if 'Nome do Programa' in desc and val not in ('nan',''):
+                nome_prog_prev = val
+        # Lê quantidades por órgão
+        mapa_orgao = {
+            'Conselho Administrativo': 'Conselho de Administração',
+            'Conselho de Administração': 'Conselho de Administração',
+            'Diretoria Estatutária': 'Diretoria Estatutária',
+            'Diretoria': 'Diretoria Estatutária',
+            'Conselho Fiscal': 'Conselho Fiscal',
+        }
+        preco_prev = 0
+        for i, row in df_prev.iterrows():
+            desc = str(row.iloc[col_idx - 1]).strip() if col_idx > 0 else ''
+            val_raw = row.iloc[col_idx]
+            val_num = pd.to_numeric(str(val_raw).replace(',','.'), errors='coerce')
+            # Preço da ação na data da outorga
+            if 'Preço da ação' in desc or 'Estimativa do Preço' in desc:
+                if pd.notnull(val_num):
+                    preco_prev = val_num
+            # Quantidade por órgão
+            if 'Quantidade a ser outorgada' in desc and pd.notnull(val_num) and val_num > 0:
+                for chave, orgao_nome in mapa_orgao.items():
+                    if chave in desc:
+                        result[orgao_nome] = (val_num, preco_prev, nome_prog_prev)
+                        break
+                else:
+                    # Formato antigo: órgão inferido pelo texto
+                    if 'Conselho' in desc and 'Fiscal' not in desc:
+                        result['Conselho de Administração'] = (val_num, preco_prev, nome_prog_prev)
+                    elif 'Fiscal' in desc:
+                        result['Conselho Fiscal'] = (val_num, preco_prev, nome_prog_prev)
+                    else:
+                        result['Diretoria Estatutária'] = (val_num, preco_prev, nome_prog_prev)
+        return result
+
+    prev_sop = _ler_prev_col(col_idx=2)  # coluna C (índice 2)
+    for orgao_prev, (qtd_prev, preco_prev, nome_prog_prev) in prev_sop.items():
+        if qtd_prev > 0:
+            evid_85.extend([
+                [nome_prog_prev, orgao_prev, 'Previsão 2026', None, preco_prev, qtd_prev, 'Novas 2026'],
+                [nome_prog_prev, orgao_prev, 'Previsão 2026', None, preco_prev, qtd_prev, 'Final 2026'],
+            ])
 
     # 8.8 — exercidas 2025 vindas do histórico (por lote)
     df_ex_25 = df_mov[
@@ -248,18 +272,14 @@ def processar_dados_base(arquivo_up, capital_social):
                 data_out, lote['Data da Carência'], qtd, fv_out
             ])
 
-    # AJUSTE 6: Previsões 2026 para RSU (8.9)
-    for i, row in df_prev.iterrows():
-        val = str(row.iloc[0])
-        if 'Quantidade a ser outorgada' in val:
-            qtd_prev = pd.to_numeric(row.iloc[1], errors='coerce')
-            if pd.notnull(qtd_prev) and qtd_prev > 0:
-                o_nome = 'Conselho de Administração' if 'Conselho' in val else 'Diretoria Estatutária'
-                prog_n = 'Novo Prog. CA (RSU)' if 'Conselho' in val else 'Novo Prog. Dir (RSU)'
-                evid_89.extend([
-                    [prog_n, o_nome, 'Previsão 2026', None, 0, qtd_prev, 'Novas 2026'],
-                    [prog_n, o_nome, 'Previsão 2026', None, 0, qtd_prev, 'Final 2026'],
-                ])
+    prev_rsu = _ler_prev_col(col_idx=2)
+    for orgao_prev, (qtd_prev, _, nome_prog_prev) in prev_rsu.items():
+        if qtd_prev > 0:
+            prog_n = f"{nome_prog_prev} (RSU)"
+            evid_89.extend([
+                [prog_n, orgao_prev, 'Previsão 2026', None, 0, qtd_prev, 'Novas 2026'],
+                [prog_n, orgao_prev, 'Previsão 2026', None, 0, qtd_prev, 'Final 2026'],
+            ])
 
     # 8.11 — entregues 2025 (RSU) por lote
     df_ent_25 = df_mov[
@@ -275,7 +295,6 @@ def processar_dados_base(arquivo_up, capital_social):
             p_merc = pd.to_numeric(str(row_ent[col_preco_merc]).replace(',', '.'), errors='coerce')
             data_mov = row_ent['Data']
 
-            # AJUSTE 7b: verifica se era Estatutário na data do exercício
             nlow_ent = str(row_ent['Nome']).lower().strip()
             membro_info = df_membros[df_membros['_nome_lower'] == nlow_ent]
             era_estatutario = False
@@ -301,7 +320,6 @@ def processar_dados_base(arquivo_up, capital_social):
     df_evid_88  = pd.DataFrame(evid_88,  columns=['Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data', 'Qtd', 'Preço_Ex', 'Preço_Merc'])
     df_evid_89  = pd.DataFrame(evid_89,  columns=['Nome', 'Órgão Administrativo', 'Programa', 'Lote', 'Fair_Value', 'Qtd', 'Status'])
     df_evid_810 = pd.DataFrame(evid_810, columns=['Coluna_Relatorio', 'Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data Outorga', 'Data Carência', 'Qtd_Outorgada', 'Fair_Value'])
-    # AJUSTE 7a: coluna Era_Estatutario + deduplicação
     df_evid_811 = pd.DataFrame(evid_811, columns=['Órgão Administrativo', 'Nome', 'Programa', 'Lote', 'Data', 'Qtd', 'Preço_Aquisicao', 'Preço_Mercado', 'Era_Estatutario'])
     df_evid_811 = df_evid_811.drop_duplicates(subset=['Nome', 'Programa', 'Lote', 'Data', 'Qtd'])
 
