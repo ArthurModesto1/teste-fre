@@ -104,41 +104,15 @@ def gerar_excel_final(dados, capital_social):
     def criar_quadro_mov(num, df_e, max_r, ano):
         ws = wb.create_sheet(f'Quadro_{num}')
         ws.append(['Grupos'] + orgaos)
-        # Determina qual evidência base usar (85 ou 89)
-        item_base = '85' if '8.5' in num else '89'
-        aba_evid = f'Evid_{item_base}'
-        is_89 = item_base == '89'
-
-        # Labels adaptados: 8.5 usa "Exercidas", 8.9 usa "Entregues"
-        if is_89:
-            labels = [
-                "Nº total de membros", "Nº de membros remunerados",
-                "Diluição potencial (%)", "Esclarecimento",
-                "Em aberto no início do exercício",
-                "Perdidas e canceladas no exercício",
-                "Entregues no exercício",
-                "Em aberto no final do exercício",
-            ]
-        else:
-            labels = [
-                "Nº total de membros", "Nº de membros remunerados",
-                "Diluição potencial (%)", "Esclarecimento",
-                "Em aberto no início do exercício (R$)",
-                "Perdidas e expiradas no exercício (R$)",
-                "Exercidas no exercício (R$)",
-                "Em aberto no final do exercício (R$)",
-            ]
-
-        # Mapeamento de colunas para o Excel de membros
-        # Evid_Membros cols: A=Orgão B=Nome C=Entrada D=Saída E=Pro_Rata_2025 F=Pro_Rata_2026
-        #   G=Tem_85_2025 H=Tem_85_2026 I=Tem_86 J=Tem_87 K=Tem_88 L=Tem_89 M=Tem_810 N=Tem_811
-        col_p = "E" if ano == 2025 else "F"
-        # Flag de remunerado por item
-        if is_89:
-            col_flag = "L"   # Tem_89 (mesma coluna para ambos os anos de RSU)
-        else:
-            col_flag = "G" if ano == 2025 else "H"  # Tem_85_2025 / Tem_85_2026
-
+        aba_evid = f'Evid_{num.replace("_2025","").replace("_2026","").replace(".","")}'
+        labels = [
+            "Nº total de membros", "Nº de membros remunerados",
+            "Diluição potencial (%)", "Esclarecimento",
+            "Em aberto no início do exercício (R$)",
+            "Perdidas e expiradas no exercício (R$)",
+            "Exercidas no exercício (R$)",
+            "Em aberto no final do exercício (R$)",
+        ]
         for i, lbl in enumerate(labels, start=2):
             ws.append([lbl])
             for c_idx, org in enumerate(orgaos):
@@ -146,50 +120,37 @@ def gerar_excel_final(dados, capital_social):
                 mr_mem = max_rows['Evid_Membros']
 
                 if "total de membros" in lbl:
+                    col_p = "E" if ano == 2025 else "F"
                     ws[cel] = (f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
                                f'Evid_Membros!${col_p}$2:${col_p}${mr_mem})')
                     ws[cel].number_format = '0.00'
 
                 elif "remunerados" in lbl:
+                    col_p    = "E" if ano == 2025 else "F"
+                    col_flag = "G" if ano == 2025 else "H"
                     ws[cel] = (f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
                                f'Evid_Membros!${col_p}$2:${col_p}${mr_mem}, '
                                f'--(Evid_Membros!${col_flag}$2:${col_flag}${mr_mem}=1))')
                     ws[cel].number_format = '0.00'
 
-                elif "R$" in lbl or ("aberto" in lbl.lower() and "R$" not in lbl) or "Perdidas" in lbl or "Entregues" in lbl or "Exercidas" in lbl:
-                    # Determina o Status correto na evidência
-                    if "início" in lbl.lower():
-                        st = f"Inicial {ano}"
-                    elif "final" in lbl.lower():
-                        st = f"Final {ano}"
-                    elif "Perdidas" in lbl or "canceladas" in lbl.lower():
-                        st = f"Perdidas {ano}"
-                    elif "Entregues" in lbl:
-                        st = f"Entregues {ano}"
-                    else:
-                        st = f"Exercidas {ano}"
-
-                    # Evid_85/89: B=Órgão  E=Preço/FV  F=Qtd  G=Status
-                    if is_89:
-                        # Para RSU (8.9), a coluna E=Fair_Value; a quantidade é F
-                        # No resumo, exibe apenas quantidade (sem preço médio ponderado)
-                        ws[cel] = (f'=IFERROR('
-                                   f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
-                                   f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
-                                   f'{aba_evid}!$G$2:$G${max_r}, "{st}"), 0)')
-                        ws[cel].number_format = '#,##0'
-                    else:
-                        ws[cel] = (f'=IFERROR('
-                                   f'SUMPRODUCT(--({aba_evid}!$B$2:$B${max_r}="{org}"), '
-                                   f'--({aba_evid}!$G$2:$G${max_r}="{st}"), '
-                                   f'{aba_evid}!$E$2:$E${max_r}, '
-                                   f'{aba_evid}!$F$2:$F${max_r}) / '
-                                   f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
-                                   f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
-                                   f'{aba_evid}!$G$2:$G${max_r}, "{st}"), 0)')
-                        ws[cel].number_format = 'R$ #,##0.00'
+                elif "R$" in lbl:
+                    st = ("Inicial " + str(ano) if "início" in lbl
+                          else ("Final " + str(ano) if "final" in lbl
+                                else ("Perdidas " + str(ano) if "Perdidas" in lbl
+                                      else "Exercidas " + str(ano))))
+                    # Evid_85/89: B=Órgão  E=Preço  F=Qtd  G=Status
+                    ws[cel] = (f'=IFERROR('
+                               f'SUMPRODUCT(--({aba_evid}!$B$2:$B${max_r}="{org}"), '
+                               f'--({aba_evid}!$G$2:$G${max_r}="{st}"), '
+                               f'{aba_evid}!$E$2:$E${max_r}, '
+                               f'{aba_evid}!$F$2:$F${max_r}) / '
+                               f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
+                               f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
+                               f'{aba_evid}!$G$2:$G${max_r}, "{st}"), 0)')
+                    ws[cel].number_format = 'R$ #,##0.00'
 
                 elif "Diluição" in lbl:
+                    # Evid_85/89: B=Órgão  F=Qtd  G=Status
                     ws[cel] = (f'=IFERROR('
                                f'SUMIFS({aba_evid}!$F$2:$F${max_r}, '
                                f'{aba_evid}!$B$2:$B${max_r}, "{org}", '
