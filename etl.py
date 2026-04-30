@@ -152,6 +152,10 @@ def processar_dados_base(arquivo_up, capital_social):
     def _ler_prev_col(col_idx=1):
         """Retorna dict {orgao: (qtd, preco, nome_prog)} lido da aba de previsão."""
         result = {}
+        n_cols = len(df_prev.columns)
+        # Se a coluna solicitada não existe na aba, retorna vazio silenciosamente
+        if col_idx >= n_cols:
+            return result
         # Tenta detectar o nome do programa
         nome_prog_prev = 'Novo Programa 2026'
         for i, row in df_prev.iterrows():
