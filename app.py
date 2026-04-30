@@ -290,14 +290,13 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
         for org in orgaos:
             d = df_ano if org == 'Total' else df_ano[df_ano['Órgão Administrativo'] == org]
 
-            # Total de membros — usa Pro_Rata do ano de referência (correto para 2025 e 2026)
-            col_pr = 'Pro_Rata_2025' if str(ano) == '2025' else 'Pro_Rata_2026'
+            # Total de membros — contagem de pessoas distintas (inteiro, conforme exigência CVM)
             if org == 'Total':
-                n_total = df_membros[col_pr].sum() if col_pr in df_membros.columns else len(df_membros)
+                n_total = len(df_membros)
             else:
                 mask = df_membros[col_org_membros].astype(str) == org
-                n_total = df_membros.loc[mask, col_pr].sum() if col_pr in df_membros.columns else mask.sum()
-            resumo[org]["Nº total de membros"] = fmt(n_total, "float")
+                n_total = mask.sum()
+            resumo[org]["Nº total de membros"] = fmt(n_total, "int")
             resumo[org]["N° de membros remunerados"] = fmt(len(d['Nome'].unique()), "int")
 
             if chave == "8.5":
