@@ -65,73 +65,69 @@ def gerar_template_anonimizado():
 
         # 1. Dados da outorga
         df_outorga = pd.DataFrame({
-            'Nome': ['Administrador A', 'Administrador A', 'Administrador B'],
-            'Órgão Administrativo': ['Diretoria Estatutária', 'Diretoria Estatutária', 'Conselho de Administração'],
-            'Desligado?': ['Não', 'Não', 'Não'],
-            'Tipo de Plano': ['Stock Options', 'Stock Options', 'Ações Restritas'],
-            'Programa': ['SOP 2022', 'SOP 2023', 'RSU 2024'],
-            'Data de Outorga': ['01/07/2022', '10/05/2023', '01/01/2024'],
-            'Preço de Exercício na Outorga': [15.50, 18.00, 0.00],
-            'Preço de Exercício Atual': [15.50, 18.00, 0.00],
-            'Lote': [1, 1, 1],
-            'Fase': ['Encerrado', 'Carência', 'Carência'],
-            'Status': ['Exercido', 'Em aberto', 'Em aberto'],
-            'Data da Carência': ['01/01/2025', '01/01/2026', '01/01/2027'],
-            'Data de Expiração': ['01/01/2030', '01/01/2031', '01/01/2034'],
-            'Outorgado (original)': [50000, 40000, 20000],
-            'Fair Value na Outorga': [5.20, 6.80, 20.00],
-            'Fair Value Atualizado': [6.00, 7.50, 22.00],
-            'Proporção de Exercício Antecipado': ['N/A', 'N/A', 'N/A'],
-            'Preço da Ação / Opção': [20.00, 20.00, 25.00],
-            'Taxa de Juros Livre de Risco': [0.10, 0.11, 0.10],
-            'Dividendos Esperados': [0.03, 0.03, 0.03],
-            'Volatilidade': [0.35, 0.35, 0.35],
-            'Model Options': [1, 1, ''],
-            'ModelVolatility': [1, 1, '']
+            'Programa': ['SOP 2023', 'Ações Restritas 2024'],
+            'Nome': ['Administrador A', 'Administrador B'],
+            'CPF': ['111.111.111-11', '222.222.222-22'],
+            'Órgão Administrativo': ['Diretoria Estatutária', 'Conselho de Administração'],
+            'Tipo de Plano': ['Stock Options', 'Ações Restritas'],
+            'Data de Outorga': ['01/01/2023', '01/01/2024'],
+            'Data da Carência': ['01/01/2025', '01/01/2027'],
+            'Data de Expiração': ['01/01/2030', '01/01/2034'],
+            'Outorgado (original)': [50000, 20000],
+            'Preço de Exercício na Outorga': [15.50, 0.00],
+            'Fair Value na Outorga': [5.20, 20.00],
+            'Preço de Exercício Atual': [15.50, 0.00],
+            'Fair Value Atualizado': [6.00, 22.00],
+            'Preço da Ação / Opção': [20.00, 25.00],
+            'Volatilidade': [0.35, 0.35],
+            'Dividendos Esperados': [0.03, 0.03],
+            'Taxa de Juros Livre de Risco': [0.10, 0.10],
+            'Proporção de Exercício Antecipado': ['N/A', 'N/A'],
+            'Model Options': [1, ''],
+            'ModelVolatility': [1, '']
         })
         df_outorga.to_excel(writer, sheet_name='Dados da outorga', index=False)
 
-        # 2. Histórico de movimentações (header na linha 2)
-        cols_mov = ['Nome', 'Órgão Administrativo', 'Empresa', 'Data', 'Plano', 'Programa',
-                    'Lote', 'Data de Outorga', 'Preço de Ação na Data de Outorga',
-                    'Status', 'Demitido', 'Motivo da Demissão',
-                    'Quantidade de Ações na Base Atual', 'Ações Liberadas  no Exercício',
-                    'Preço da Ação', 'Preço de Exercício na Base Atual',
-                    'Receita*', 'Ganho*', 'Tipo de Recebimento', 'Ganho na Moeda Local']
-        df_mov_data = [
-            ['Administrador A', 'Diretoria Estatutária', 'Empresa Exemplo',
-             '16/04/2025', 'Plano 2021', 'SOP 2022', 1, '01/07/2022', None,
-             'Exercido', False, '-', 50000, 50000, 20.00, None, 260000, 225000, 'Ações', 0],
-        ]
-        df_mov_excel = pd.DataFrame(columns=range(len(cols_mov)))
-        df_mov_excel.loc[0] = ['Histórico de movimentação'] + [''] * (len(cols_mov) - 1)
+        # 2. Histórico de movimentações (header na linha 2 como no arquivo original)
+        cols_mov = ['Programa', 'Plano', 'Nome', 'CPF', 'Órgão Administrativo', 'Data',
+                    'Quantidade de Ações', 'Preço de Exercício', 'Preço da Ação (Mercado)', 'Status']
+        df_mov = pd.DataFrame([
+            ['SOP 2023', 'Stock Options', 'Administrador A', '111.111.111-11', 'Diretoria Estatutária',
+             '15/03/2025', 10000, 15.50, 25.00, 'Exercido'],
+            ['SOP 2023', 'Stock Options', 'Administrador A', '111.111.111-11', 'Diretoria Estatutária',
+             '20/04/2025', 5000, 15.50, 25.00, 'Cancelado'],
+            ['Ações Restritas 2024', 'Ações Restritas', 'Administrador B', '222.222.222-22',
+             'Conselho de Administração', '10/05/2025', 5000, 0.00, 26.00, 'Entregue']
+        ], columns=cols_mov)
+
+        df_mov_excel = pd.DataFrame(columns=[f'Dummy_{i}' for i in range(len(cols_mov))])
+        df_mov_excel.loc[0] = ['Relatório de Movimentação (Opções e Ações)'] + [''] * (len(cols_mov) - 1)
         df_mov_excel.loc[1] = cols_mov
-        for i, row in enumerate(df_mov_data):
-            df_mov_excel.loc[i+2] = row
+        for i, row in df_mov.iterrows():
+            df_mov_excel.loc[i+2] = row.values
         df_mov_excel.to_excel(writer, sheet_name='Histórico de movimentações', index=False, header=False)
 
-        # 3. Previsão outorga 2026 (formato real)
+        # 3. Previsão outorga 2026
         df_prev = pd.DataFrame([
-            [None, 'Caso haja algum novo programa planejado para o ano de 2026...', None],
-            [None, 'Preencha as informações nas células da coluna "B"', None],
-            [None, 'Obs: O levantamento abaixo não precisa ser exato, pois é uma previsão para 2026.', None],
-            [None, None, None],
-            [None, 'Novo Programa 1', None],
-            [None, 'Nome do Programa:', 'PROGRAMA 2026'],
-            [None, 'Tipo de programa a ser outorgado', 'RSU'],
-            [None, 'Quantidade a ser outorgada para o Conselho de Administração:', 0],
-            [None, 'Quantidade a ser outorgada para a Diretoria Estatutária:', 300000],
-            [None, 'Quantidade a ser outorgada para o Conselho Fiscal:', 0],
-            [None, 'Estimativa do Preço da ação na data da outorga:', 25.50],
+            ['Previsão Outorga 2026 (Conselho de Administração)', ''],
+            ['Quantidade a ser outorgada', 100000],
+            ['Preço', 25.50],
+            ['', ''],
+            ['Previsão Outorga 2026 (Diretoria Estatutária)', ''],
+            ['Quantidade a ser outorgada', 300000],
+            ['Preço', 25.50]
         ])
         df_prev.to_excel(writer, sheet_name='Previsão outorga 2026', index=False, header=False)
 
         # 4. Membros
         df_membros = pd.DataFrame({
-            'Orgão': ['Diretoria Estatutária', 'Conselho de Administração', 'Conselho Fiscal'],
-            'NOME COMPLETO': ['Administrador A', 'Administrador B', 'Administrador C'],
-            'DATA DE ENTRADA': ['01/01/2020', '01/01/2021', '01/01/2022'],
-            'DATA DE SAÍDA': ['31/12/2999', '31/12/2999', '31/12/2026'],
+            'Orgão': ['Diretoria Estatutária', 'Conselho de Administração'],
+            'CARGO': ['Diretor Presidente', 'Presidente do Conselho'],
+            'NOME COMPLETO': ['Administrador A', 'Administrador B'],
+            'CPF/CNPJ': ['111.111.111-11', '222.222.222-22'],
+            'DATA DE ENTRADA': ['01/01/2020', '01/01/2021'],
+            'DATA DE SAÍDA': ['31/12/2026', '31/12/2026'],
+            'PRAZO DE MANDATO': ['2 anos', '2 anos']
         })
         df_membros.to_excel(writer, sheet_name='Membros', index=False)
 
@@ -155,7 +151,7 @@ def fmt(val, tipo="num"):
         return str(val) if pd.notna(val) and val != "" else " - "
 
 # ==========================================
-# MOTOR DE CONSOLIDAÇÃO DO RESUMO
+# MOTOR DE CONSOLIDAÇÃO DO RESUMO (SEGREGAÇÃO POR ANO)
 # ==========================================
 def gerar_resumo_cvm(dados_completos, chave, cap_social):
     """Constrói o DataFrame de resumo quebrado por anos com os rótulos exatos da CVM."""
@@ -165,56 +161,40 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
     if df.empty and chave != "8.12":
         return {}
 
-    col_org_membros = 'Orgão' if 'Orgão' in df_membros.columns else (
-        'Órgão' if 'Órgão' in df_membros.columns else 'Órgão Administrativo')
+    col_org_membros = 'Orgão' if 'Orgão' in df_membros.columns else ('Órgão' if 'Órgão' in df_membros.columns else 'Órgão Administrativo')
     orgaos = ['Conselho de Administração', 'Diretoria Estatutária', 'Conselho Fiscal', 'Total']
 
     resumos_por_ano = {}
 
-    # ── Determina os anos presentes nos dados ─────────────────────────────────
     if chave in ["8.5", "8.9"]:
-        # Status tem formato "Inicial 2025", "Final 2026", etc.
-        anos_raw = df['Status'].dropna().str.extract(r'(\d{4})')[0].dropna().unique()
-        anos = sorted(anos_raw)
+        df['Ano_Ref'] = df['Status'].astype(str).str.extract(r'(\d{4})')
+        anos = sorted(df['Ano_Ref'].dropna().unique())
     elif chave in ["8.8", "8.11"]:
-        df = df.copy()
         df['Ano_Ref'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce').dt.year
         anos = sorted(df['Ano_Ref'].dropna().astype(int).astype(str).unique())
     elif chave in ["8.6", "8.10"]:
-        df = df.copy()
         df['Ano_Ref'] = pd.to_datetime(df['Data Outorga'], errors='coerce').dt.year
         anos = sorted(df['Ano_Ref'].dropna().astype(int).astype(str).unique())
     else:
         anos = ["Último Exercício"]
 
-    if not anos:
-        anos = ["Último Exercício"]
+    if not anos: anos = ["Último Exercício"]
 
     for ano in anos:
-        # Filtra registros do ano
-        if chave in ["8.5", "8.9"]:
-            df_ano = df[df['Status'].str.contains(str(ano), na=False)].copy()
-        elif chave in ["8.8", "8.11", "8.6", "8.10"]:
+        if chave not in ["8.7", "8.12"]:
             df_ano = df[df['Ano_Ref'].astype(str) == str(ano)].copy()
-        elif chave in ["8.7", "8.12"]:
-            df_ano = df.copy()
         else:
             df_ano = df.copy()
 
         if df_ano.empty and chave != "8.12":
             continue
 
-        lbl_ano = (f"{ano} (Projeção)" if str(ano) == "2026"
-                   else f"Exercício {ano}" if str(ano).isdigit()
-                   else str(ano))
+        lbl_ano = f"{ano} (Projeção)" if str(ano) == "2026" else f"Exercício {ano}" if str(ano).isdigit() else ano
 
-        # ── 8.6 / 8.10: por programa ─────────────────────────────────────────
         if chave in ["8.6", "8.10"]:
-            if 'Coluna_Relatorio' not in df_ano.columns:
-                continue
+            if 'Coluna_Relatorio' not in df_ano.columns: continue
             programas = [p for p in df_ano['Coluna_Relatorio'].unique() if pd.notnull(p)]
-            if not programas:
-                continue
+            if not programas: continue
 
             linhas = {
                 "Nº total de membros": {}, "N° de membros remunerados": {}, "Data de outorga": {},
@@ -224,47 +204,31 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
 
             for prog in programas:
                 d_p = df_ano[df_ano['Coluna_Relatorio'] == prog]
-                if d_p.empty:
-                    continue
+                if d_p.empty: continue
                 org_prog = d_p['Órgão Administrativo'].iloc[0]
 
                 linhas["Nº total de membros"][prog] = fmt(
                     len(df_membros[df_membros[col_org_membros].astype(str) == org_prog]), "int"
                 )
                 linhas["N° de membros remunerados"][prog] = fmt(len(d_p['Nome'].unique()), "int")
-                linhas["Data de outorga"][prog] = (
-                    d_p['Data Outorga'].iloc[0].strftime('%d/%m/%Y')
-                    if pd.notnull(d_p['Data Outorga'].iloc[0]) else " - "
-                )
+                linhas["Data de outorga"][prog] = d_p['Data Outorga'].iloc[0].strftime('%d/%m/%Y') if pd.notnull(d_p['Data Outorga'].iloc[0]) else " - "
                 linhas["Quantidade outorgada"][prog] = fmt(d_p['Qtd_Outorgada'].sum(), "int")
-                linhas["Prazo para opções/ações se tornarem exercíveis"][prog] = (
-                    d_p['Data Carência'].iloc[0].strftime('%d/%m/%Y')
-                    if pd.notnull(d_p['Data Carência'].iloc[0]) else " - "
-                )
-                linhas["Prazo máximo"][prog] = (
-                    d_p['Data Expiração'].iloc[0].strftime('%d/%m/%Y')
-                    if chave == '8.6' and 'Data Expiração' in d_p.columns and pd.notnull(d_p['Data Expiração'].iloc[0])
-                    else " - "
-                )
+                linhas["Prazo para opções/ações se tornarem exercíveis"][prog] = d_p['Data Carência'].iloc[0].strftime('%d/%m/%Y') if pd.notnull(d_p['Data Carência'].iloc[0]) else " - "
+                linhas["Prazo máximo"][prog] = d_p['Data Expiração'].iloc[0].strftime('%d/%m/%Y') if chave == '8.6' and pd.notnull(d_p['Data Expiração'].iloc[0]) else " - "
                 linhas["Prazo de restrição"][prog] = "N/A"
                 linhas["Valor justo na data"][prog] = fmt(d_p['Fair_Value'].mean(), "moeda")
-                linhas["Multiplicação (Ganho)"][prog] = fmt(
-                    (d_p['Qtd_Outorgada'] * d_p['Fair_Value']).sum(), "moeda"
-                )
+                linhas["Multiplicação (Ganho)"][prog] = fmt((d_p['Qtd_Outorgada'] * d_p['Fair_Value']).sum(), "moeda")
 
             resumos_por_ano[lbl_ano] = pd.DataFrame(linhas).T
             continue
 
-        # ── 8.12: premissas de precificação ─────────────────────────────────
         if chave == "8.12":
             df_out = dados_completos.get('df_outorga', pd.DataFrame())
-            df_out = df_out.copy()
             df_out['Data de Outorga'] = pd.to_datetime(df_out.get('Data de Outorga'), errors='coerce', dayfirst=True)
             df_25 = df_out[df_out['Data de Outorga'].dt.year < 2025].copy()
 
             if df_25.empty:
-                resumos_por_ano["Exercício Atual"] = pd.DataFrame(
-                    {"Aviso": ["Nenhum programa em aberto no início de 2025"]})
+                resumos_por_ano["2025"] = pd.DataFrame({"Aviso": ["Nenhum programa em aberto no início de 2025"]})
                 continue
 
             df_25['Chave_Coluna'] = df_25['Programa'] + " (" + df_25['Órgão Administrativo'] + ")"
@@ -282,9 +246,8 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 d_p = df_25[df_25['Chave_Coluna'] == prog].iloc[0]
 
                 modelo_raw = pd.to_numeric(str(d_p.get('Model Options', '')).replace(',', '.'), errors='coerce')
-                linhas["Modelo de Precificação"][prog] = (
-                    MODEL_OPTIONS.get(int(modelo_raw), "A preencher") if pd.notnull(modelo_raw) else "A preencher"
-                )
+                linhas["Modelo de Precificação"][prog] = MODEL_OPTIONS.get(int(modelo_raw), "A preencher") if pd.notnull(modelo_raw) else "A preencher"
+
                 linhas["Preço Médio Ponderado das Ações (R$)"][prog] = fmt(
                     pd.to_numeric(str(d_p.get('Preço da Ação / Opção', 0)).replace(',', '.'), errors='coerce'), "moeda"
                 )
@@ -300,9 +263,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 if pd.notnull(dout) and pd.notnull(dexp):
                     if dexp.year >= 9999:
                         dcar = pd.to_datetime(d_p.get('Data da Carência'), errors='coerce')
-                        linhas["Prazo de vida da opção"][prog] = (
-                            f"{(dcar - dout).days / 365.25:.1f} anos" if pd.notnull(dcar) else " - "
-                        )
+                        linhas["Prazo de vida da opção"][prog] = f"{(dcar - dout).days / 365.25:.1f} anos" if pd.notnull(dcar) else " - "
                     else:
                         linhas["Prazo de vida da opção"][prog] = f"{(dexp - dout).days / 365.25:.1f} anos"
                 else:
@@ -317,76 +278,40 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 linhas["Exercício antecipado"][prog] = str(d_p.get('Proporção de Exercício Antecipado', ' - '))
 
                 vol_raw = pd.to_numeric(str(d_p.get('ModelVolatility', '')).replace(',', '.'), errors='coerce')
-                linhas["Determinação da volatilidade"][prog] = (
-                    MODEL_VOLATILITY.get(int(vol_raw), "A preencher") if pd.notnull(vol_raw) else "A preencher"
-                )
+                linhas["Determinação da volatilidade"][prog] = MODEL_VOLATILITY.get(int(vol_raw), "A preencher") if pd.notnull(vol_raw) else "A preencher"
+
                 linhas["Outras características"][prog] = "A preencher"
 
             resumos_por_ano["Exercício Atual"] = pd.DataFrame(linhas).T
             continue
 
-        # ── 8.5 / 8.7 / 8.8 / 8.9 / 8.11: por órgão ───────────────────────
         resumo = {org: {} for org in orgaos}
 
         for org in orgaos:
             d = df_ano if org == 'Total' else df_ano[df_ano['Órgão Administrativo'] == org]
 
-            # Total de membros — Pro_Rata correto por ano
-            col_pr = 'Pro_Rata_2026' if str(ano) == '2026' else 'Pro_Rata_2025'
+            # Total de membros — usa Pro_Rata do ano de referência (correto para 2025 e 2026)
+            col_pr = 'Pro_Rata_2025' if str(ano) == '2025' else 'Pro_Rata_2026'
             if org == 'Total':
                 n_total = df_membros[col_pr].sum() if col_pr in df_membros.columns else len(df_membros)
             else:
                 mask = df_membros[col_org_membros].astype(str) == org
                 n_total = df_membros.loc[mask, col_pr].sum() if col_pr in df_membros.columns else mask.sum()
             resumo[org]["Nº total de membros"] = fmt(n_total, "float")
-
-            # N° de membros remunerados — somente quem tem registro no ano
-            if chave == "8.5":
-                flag_col = 'Tem_85_2026' if str(ano) == '2026' else 'Tem_85_2025'
-                if flag_col in df_membros.columns:
-                    if org == 'Total':
-                        n_rem = (df_membros[col_pr] * df_membros[flag_col]).sum()
-                    else:
-                        mask = df_membros[col_org_membros].astype(str) == org
-                        n_rem = (df_membros.loc[mask, col_pr] * df_membros.loc[mask, flag_col]).sum()
-                else:
-                    n_rem = len(d['Nome'].unique()) if not d.empty else 0
-            elif chave == "8.7":
-                flag_col = 'Tem_87'
-                if flag_col in df_membros.columns:
-                    if org == 'Total':
-                        n_rem = (df_membros[col_pr] * df_membros[flag_col]).sum()
-                    else:
-                        mask = df_membros[col_org_membros].astype(str) == org
-                        n_rem = (df_membros.loc[mask, col_pr] * df_membros.loc[mask, flag_col]).sum()
-                else:
-                    n_rem = len(d['Nome'].unique()) if not d.empty else 0
-            elif chave == "8.9":
-                flag_col = 'Tem_89'
-                if flag_col in df_membros.columns:
-                    if org == 'Total':
-                        n_rem = (df_membros[col_pr] * df_membros[flag_col]).sum()
-                    else:
-                        mask = df_membros[col_org_membros].astype(str) == org
-                        n_rem = (df_membros.loc[mask, col_pr] * df_membros.loc[mask, flag_col]).sum()
-                else:
-                    n_rem = len(d['Nome'].unique()) if not d.empty else 0
-            else:
-                n_rem = len(d['Nome'].unique()) if not d.empty else 0
-            resumo[org]["N° de membros remunerados"] = fmt(n_rem, "float")
+            resumo[org]["N° de membros remunerados"] = fmt(len(d['Nome'].unique()), "int")
 
             if chave == "8.5":
                 resumo[org]["Preço médio ponderado de exercício:"] = ""
                 resumo[org]["  Em aberto no início do exercício"] = fmt(
-                    d[d['Status'].str.contains(f'Inicial {ano}', na=False)]['Preço'].mean(), "moeda"
+                    d[d['Status'].str.contains('Inicial', na=False)]['Preço'].mean(), "moeda"
                 )
                 resumo[org]["  Perdidas e expiradas"] = fmt(
-                    d[d['Status'].str.contains(f'Perdidas {ano}', na=False)]['Preço'].mean(), "moeda"
+                    d[d['Status'].str.contains('Perdidas', na=False)]['Preço'].mean(), "moeda"
                 )
                 resumo[org]["  Exercidas durante o exercício"] = fmt(
-                    d[d['Status'].str.contains(f'Exercidas {ano}', na=False)]['Preço'].mean(), "moeda"
+                    d[d['Status'].str.contains('Exercidas', na=False)]['Preço'].mean(), "moeda"
                 )
-                qtd_fim = d[d['Status'].str.contains(f'Final {ano}', na=False)]['Qtd'].sum()
+                qtd_fim = d[d['Status'].str.contains('Final', na=False)]['Qtd'].sum()
                 resumo[org]["Diluição potencial em caso de exercício"] = fmt(
                     (qtd_fim / cap_social) if cap_social else 0, "perc"
                 )
@@ -396,15 +321,15 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 d_sim = d[d['Status_Vesting'] == 'Exercível']
 
                 resumo[org]["Opções ainda não exercíveis"] = ""
-                resumo[org]["  i. Quantidade"]              = fmt(d_nao['Qtd_Saldo'].sum(), "int")
-                resumo[org]["  ii. Preço médio ponderado"]  = fmt(d_nao['Preço'].mean(), "moeda")
-                resumo[org]["  iii. Valor justo"]           = fmt(d_nao['Fair_Value'].mean(), "moeda")
+                resumo[org]["  i. Quantidade"]          = fmt(d_nao['Qtd_Saldo'].sum(), "int")
+                resumo[org]["  ii. Preço médio ponderado"] = fmt(d_nao['Preço'].mean(), "moeda")
+                resumo[org]["  iii. Valor justo"]        = fmt(d_nao['Fair_Value'].mean(), "moeda")
 
                 resumo[org]["Opções exercíveis"] = ""
-                resumo[org]["  i. Quantidade"]              = fmt(d_sim['Qtd_Saldo'].sum(), "int")
-                resumo[org]["  ii. Preço médio ponderado"]  = fmt(d_sim['Preço'].mean(), "moeda")
-                resumo[org]["  iii. Valor justo"]           = fmt(d_sim['Fair_Value'].mean(), "moeda")
-                resumo[org]["Valor justo do TOTAL"]         = fmt((d['Qtd_Saldo'] * d['Fair_Value']).sum(), "moeda")
+                resumo[org]["  i. Quantidade"]          = fmt(d_sim['Qtd_Saldo'].sum(), "int")
+                resumo[org]["  ii. Preço médio ponderado"] = fmt(d_sim['Preço'].mean(), "moeda")
+                resumo[org]["  iii. Valor justo"]        = fmt(d_sim['Fair_Value'].mean(), "moeda")
+                resumo[org]["Valor justo do TOTAL"]      = fmt((d['Qtd_Saldo'] * d['Fair_Value']).sum(), "moeda")
 
             elif chave == "8.8":
                 resumo[org]["Número de ações"]          = fmt(d['Qtd'].sum(), "int")
@@ -415,7 +340,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 )
 
             elif chave == "8.9":
-                qtd_fim = d[d['Status'].str.contains(f'Final {ano}', na=False)]['Qtd'].sum()
+                qtd_fim = d[d['Status'].str.contains('Final', na=False)]['Qtd'].sum()
                 resumo[org]["Número de ações"]    = fmt(qtd_fim, "int")
                 resumo[org]["Diluição potencial"] = fmt((qtd_fim / cap_social) if cap_social else 0, "perc")
 
@@ -444,7 +369,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
 # BARRA LATERAL (CONFIGS E NAVEGAÇÃO)
 # ==========================================
 with st.sidebar:
-    st.title("📊 Gerador FRE")
+    st.title(" Gerador FRE")
 
     st.header("1. Configurações")
     capital_social = st.number_input(
@@ -477,16 +402,11 @@ if arquivo_up is not None:
     else:
         if "dados_processados" not in st.session_state:
             with st.spinner("Lendo e processando base de dados..."):
-                try:
-                    st.session_state.dados_processados = processar_dados_base(arquivo_up, capital_social)
-                    st.toast('Processamento concluído!', icon='✅')
-                except Exception as e:
-                    st.error(f"Erro ao processar a base: {e}")
-                    st.stop()
+                st.session_state.dados_processados = processar_dados_base(arquivo_up, capital_social)
+            st.toast('Processamento concluído!', icon='✅')
 
         dados = st.session_state.dados_processados
-        if "8.12" not in dados:
-            dados["8.12"] = dados["df_outorga"]
+        if "8.12" not in dados: dados["8.12"] = dados["df_outorga"]
 
         chaves_quadros = ["8.5", "8.6", "8.7", "8.8", "8.9", "8.10", "8.11", "8.12"]
         titulos_abas = [f"Item {k}" for k in chaves_quadros]
@@ -522,16 +442,14 @@ if arquivo_up is not None:
                     else:
                         orgaos_presentes = [str(org) for org in df_completo['Órgão Administrativo'].dropna().unique()
                                             if str(org).strip() not in ['nan', '']]
-                        if not orgaos_presentes:
-                            orgaos_presentes = ["Geral"]
+                        if not orgaos_presentes: orgaos_presentes = ["Geral"]
 
                         abas_orgaos = st.tabs(orgaos_presentes)
                         df_partes_editadas = []
 
                         for i, org in enumerate(orgaos_presentes):
                             with abas_orgaos[i]:
-                                df_fatia = (df_completo if org == "Geral"
-                                            else df_completo[df_completo['Órgão Administrativo'] == org])
+                                df_fatia = df_completo if org == "Geral" else df_completo[df_completo['Órgão Administrativo'] == org]
                                 editado = st.data_editor(
                                     df_fatia, key=f"ed_{quadro_ativo}_{i}", num_rows="dynamic",
                                     use_container_width=True, hide_index=True
@@ -574,7 +492,7 @@ else:
     # ==========================================
     # LANDING PAGE (ANTES DO UPLOAD)
     # ==========================================
-    st.markdown("<h1 style='text-align: center;'>📊 Gerador Automático do FRE - Item 8</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'> Gerador Automático do FRE - Item 8</h1>", unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2 = st.columns([2, 1])
