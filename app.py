@@ -208,7 +208,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
                 org_prog = d_p['Órgão Administrativo'].iloc[0]
 
                 linhas["Nº total de membros"][prog] = fmt(
-                    len(df_membros[df_membros[col_org_membros].astype(str).str.contains(org_prog.split()[0], na=False)]), "int"
+                    len(df_membros[df_membros[col_org_membros].astype(str) == org_prog]), "int"
                 )
                 linhas["N° de membros remunerados"][prog] = fmt(len(d_p['Nome'].unique()), "int")
                 linhas["Data de outorga"][prog] = d_p['Data Outorga'].iloc[0].strftime('%d/%m/%Y') if pd.notnull(d_p['Data Outorga'].iloc[0]) else " - "
@@ -291,7 +291,7 @@ def gerar_resumo_cvm(dados_completos, chave, cap_social):
             d = df_ano if org == 'Total' else df_ano[df_ano['Órgão Administrativo'] == org]
 
             n_total = len(df_membros) if org == 'Total' else len(
-                df_membros[df_membros[col_org_membros].astype(str).str.contains(org.split()[0], na=False)]
+                df_membros[df_membros[col_org_membros].astype(str) == org]
             )
             resumo[org]["Nº total de membros"] = fmt(n_total, "int")
             resumo[org]["N° de membros remunerados"] = fmt(len(d['Nome'].unique()), "int")
