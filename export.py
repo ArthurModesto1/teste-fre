@@ -120,18 +120,16 @@ def gerar_excel_final(dados, capital_social):
                 mr_mem = max_rows['Evid_Membros']
 
                 if "total de membros" in lbl:
-                    col_p = "E" if ano == 2025 else "F"
-                    ws[cel] = (f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
-                               f'Evid_Membros!${col_p}$2:${col_p}${mr_mem})')
-                    ws[cel].number_format = '0.00'
+                    ws[cel] = (f'=COUNTA(Evid_Membros!$B$2:$B${mr_mem})' if org == 'Total'
+                               else f'=COUNTIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}")')
+                    ws[cel].number_format = '0'
 
                 elif "remunerados" in lbl:
-                    col_p    = "E" if ano == 2025 else "F"
                     col_flag = "G" if ano == 2025 else "H"
-                    ws[cel] = (f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
-                               f'Evid_Membros!${col_p}$2:${col_p}${mr_mem}, '
-                               f'--(Evid_Membros!${col_flag}$2:${col_flag}${mr_mem}=1))')
-                    ws[cel].number_format = '0.00'
+                    ws[cel] = (f'=COUNTIF(Evid_Membros!${col_flag}$2:${col_flag}${mr_mem}, 1)' if org == 'Total'
+                               else f'=COUNTIFS(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
+                                    f'Evid_Membros!${col_flag}$2:${col_flag}${mr_mem}, 1)')
+                    ws[cel].number_format = '0'
 
                 elif "R$" in lbl:
                     st = ("Inicial " + str(ano) if "início" in lbl
@@ -201,15 +199,13 @@ def gerar_excel_final(dados, capital_social):
                 org_val = df_g['Órgão Administrativo'].iloc[0]
 
                 if "total de membros" in lbl:
-                    ws[cel] = (f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org_val)}", '
-                               f'Evid_Membros!$E$2:$E${mr_mem})')
-                    ws[cel].number_format = '0.00'
+                    ws[cel] = (f'=COUNTIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org_val)}")')
+                    ws[cel].number_format = '0'
 
                 elif "remunerados" in lbl:
-                    ws[cel] = (f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org_val)}"), '
-                               f'Evid_Membros!$E$2:$E${mr_mem}, '
-                               f'--(Evid_Membros!${col_flag_rem}$2:${col_flag_rem}${mr_mem}=1))')
-                    ws[cel].number_format = '0.00'
+                    ws[cel] = (f'=COUNTIFS(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org_val)}", '
+                               f'Evid_Membros!${col_flag_rem}$2:${col_flag_rem}${mr_mem}, 1)')
+                    ws[cel].number_format = '0'
 
                 elif "Data de outorga" in lbl:
                     ws[cel] = df_g['Data Outorga'].iloc[0].strftime('%d/%m/%Y') if pd.notnull(df_g['Data Outorga'].iloc[0]) else "-"
@@ -283,17 +279,17 @@ def gerar_excel_final(dados, capital_social):
             st = "Não exercível" if "Não" in lbl else "Exercível"
 
             if "total de membros" in lbl:
-                ws_87[cel] = (f'=SUM(Evid_Membros!$E$2:$E${mr_mem})' if org == 'Total'
-                              else f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", Evid_Membros!$E$2:$E${mr_mem})')
-                ws_87[cel].number_format = '0.00'
+                ws_87[cel] = (f'=COUNTA(Evid_Membros!$B$2:$B${mr_mem})' if org == 'Total'
+                              else f'=COUNTIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}")')
+                ws_87[cel].number_format = '0'
 
             elif "remunerados" in lbl:
                 # col J = Tem_87
                 ws_87[cel] = (
-                    f'=SUMPRODUCT(Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$J$2:$J${mr_mem}=1))' if org == 'Total'
-                    else f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
-                         f'Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$J$2:$J${mr_mem}=1))')
-                ws_87[cel].number_format = '0.00'
+                    f'=COUNTIF(Evid_Membros!$J$2:$J${mr_mem}, 1)' if org == 'Total'
+                    else f'=COUNTIFS(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
+                         f'Evid_Membros!$J$2:$J${mr_mem}, 1)')
+                ws_87[cel].number_format = '0'
 
             elif "Quantidade" in lbl:
                 # E=Status_Vesting  F=Qtd_Saldo
@@ -344,17 +340,17 @@ def gerar_excel_final(dados, capital_social):
             cel = f"{get_col(c_idx + 2)}{i}"
 
             if "total de membros" in lbl:
-                ws_88[cel] = (f'=SUM(Evid_Membros!$E$2:$E${mr_mem})' if org == 'Total'
-                              else f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", Evid_Membros!$E$2:$E${mr_mem})')
-                ws_88[cel].number_format = '0.00'
+                ws_88[cel] = (f'=COUNTA(Evid_Membros!$B$2:$B${mr_mem})' if org == 'Total'
+                              else f'=COUNTIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}")')
+                ws_88[cel].number_format = '0'
 
             elif "remunerados" in lbl:
                 # col K = Tem_88
                 ws_88[cel] = (
-                    f'=SUMPRODUCT(Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$K$2:$K${mr_mem}=1))' if org == 'Total'
-                    else f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
-                         f'Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$K$2:$K${mr_mem}=1))')
-                ws_88[cel].number_format = '0.00'
+                    f'=COUNTIF(Evid_Membros!$K$2:$K${mr_mem}, 1)' if org == 'Total'
+                    else f'=COUNTIFS(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
+                         f'Evid_Membros!$K$2:$K${mr_mem}, 1)')
+                ws_88[cel].number_format = '0'
 
             elif "Número" in lbl:
                 # F=Qtd
@@ -403,17 +399,17 @@ def gerar_excel_final(dados, capital_social):
             cel = f"{get_col(c_idx + 2)}{i}"
 
             if "total de membros" in lbl:
-                ws_811[cel] = (f'=SUM(Evid_Membros!$E$2:$E${mr_mem})' if org == 'Total'
-                               else f'=SUMIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", Evid_Membros!$E$2:$E${mr_mem})')
-                ws_811[cel].number_format = '0.00'
+                ws_811[cel] = (f'=COUNTA(Evid_Membros!$B$2:$B${mr_mem})' if org == 'Total'
+                               else f'=COUNTIF(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}")')
+                ws_811[cel].number_format = '0'
 
             elif "remunerados" in lbl:
                 # col N = Tem_811
                 ws_811[cel] = (
-                    f'=SUMPRODUCT(Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$N$2:$N${mr_mem}=1))' if org == 'Total'
-                    else f'=SUMPRODUCT(--(Evid_Membros!$A$2:$A${mr_mem}="{get_t(org)}"), '
-                         f'Evid_Membros!$E$2:$E${mr_mem}, --(Evid_Membros!$N$2:$N${mr_mem}=1))')
-                ws_811[cel].number_format = '0.00'
+                    f'=COUNTIF(Evid_Membros!$N$2:$N${mr_mem}, 1)' if org == 'Total'
+                    else f'=COUNTIFS(Evid_Membros!$A$2:$A${mr_mem}, "{get_t(org)}", '
+                         f'Evid_Membros!$N$2:$N${mr_mem}, 1)')
+                ws_811[cel].number_format = '0'
 
             elif "Número de ações" in lbl:
                 # F=Qtd
@@ -448,7 +444,7 @@ def gerar_excel_final(dados, capital_social):
     # ==========================================
     ws_812 = wb.create_sheet('Quadro_8.12')
     df_outorga['Data de Outorga'] = pd.to_datetime(df_outorga['Data de Outorga'], errors='coerce', dayfirst=True)
-    df_25 = df_outorga[df_outorga['Data de Outorga'].dt.year < 2025].copy()
+    df_25 = df_outorga[df_outorga['Data de Outorga'].dt.year <= 2025].copy()
 
     if df_25.empty:
         ws_812.append(["Variável", "Nenhum programa em aberto no início de 2025"])
